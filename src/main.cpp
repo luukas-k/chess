@@ -233,7 +233,7 @@ struct Image {
 
 Image create_image() {
 	int w{}, h{}, c{};
-	auto data = stbi_load("bin/pieces_v2.png", &w, &h, &c, 4);
+	auto data = stbi_load("bin/pieces.png", &w, &h, &c, 4);
 
 	Image img{};
 	glGenTextures(1, &img.tex);
