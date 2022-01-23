@@ -130,12 +130,12 @@ void init_fen(ChessBoard& brd, const char* fen) {
 	}
 	// Castling availability
 	const char* castling = fen + i + 2 + 2;
-	if (castling[0] == '-') {
-		// No castling available
-	}
-	else {
+	//if (castling[0] == '-') {
+	//	// No castling available
+	//}
+	//else {
 
-	}
+	//}
 	return;
 }
 
@@ -307,6 +307,14 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 	auto is_light_square = [](int x, int y) {
 		return (x % 2 == 0 && y % 2 == 0) || (x % 2 == 1 && y % 2 == 1);
 	};
+	auto is_checked_king = [&](int x, int y) {
+		if (brd.is_check) {
+			return brd.current_turn == ChessBoard::White ?
+				(brd.white_king_position == x + y * 8) :
+				(brd.black_king_position == x + y * 8);
+		}
+		return false;
+	};
 	auto is_selected = [&](int x, int y) {
 		return x == (brd.selected % 8) && y == (brd.selected / 8);
 	};
@@ -324,6 +332,10 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 		return brd.hovered_square == (x + y * 8);
 	};
 	auto get_color = [&](int x, int y) -> glm::vec3 {
+		// Checked king
+		if (is_checked_king(x, y)) {
+			return {0.9f, 0.1f, 0.1f};
+		}
 		// Mouse hover
 		if (is_hovered(x, y)) {
 			return {0.7f, 0.3f, 0.3f};
@@ -753,6 +765,7 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 			for (int i = 0; i < brd.move_count; i++) {
 				if ((brd.highlights[i] != -1) && (brd.highlights[i] == move_target)) {
 					do_move(brd, brd.selected, move_target);
+					brd.is_check = false;
 					if (is_in_check(brd, brd.current_turn)) {
 						brd.is_check = true;
 					}
@@ -833,7 +846,6 @@ int main() {
 
 		glClearColor(244.f / 255.f, 163.f / 255.f, 132.f / 255.f, 1.f);
 		glClear(GL_COLOR_BUFFER_BIT);
-
 
 		process_input(board, current, prev, sw, sh);
 		draw(board, sw, sh);
