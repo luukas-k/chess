@@ -28,7 +28,7 @@ struct ChessBoard {
 	int en_passant_target{ -1 };
 	int highlights[65]{};
 	int move_count = 0;
-	bool is_check{ false };
+	bool is_check{ false }, is_checkmate{ false };
 	int white_king_position{ 0 }, black_king_position{ 0 };
 	int hovered_square{ -1 };
 };
@@ -690,6 +690,22 @@ bool is_in_check(const ChessBoard& brd, ChessBoard::Color c) {
 	return false;
 };
 
+bool is_in_checkmate(const ChessBoard& brd, ChessBoard::Color c) {
+	Position king_location = (c == ChessBoard::White) ? brd.white_king_position : brd.black_king_position;
+	for (int i = 0; i < 64; i++) {
+		Position from(i);
+		if (!is_empty(brd, i) && ((get_color(brd, from) == c))) {
+			int piece_move_list[64]{ -1 };
+			int piece_move_count = 0;
+			get_valid_moves(brd, piece_move_list, piece_move_count, from);
+			if (piece_move_count != 0) {
+				return false;
+			}
+		}
+	}
+	return true;
+};
+
 void do_move(ChessBoard& brd, Position from_pos, Position to_pos) {
 	if (from_pos.p == to_pos.p)
 		return;
@@ -769,57 +785,67 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 		on_screen = true;
 	}
 
-	if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
-		if (brd.selected == -1) {
-			brd.selected = hx + hy * 8;
-			// int selected_piece_color = (brd.pieces[brd.selected] & ChessBoard::COLOR_BIT);
-			ChessBoard::Color pieceColor = get_color(brd, brd.selected);
-			if (is_empty(brd, brd.selected) || (pieceColor != brd.current_turn)) {
+	brd.move_count = 0;
+	for (int i = 0; i < 64; i++)
+		brd.highlights[i] = -1;
+	if (!brd.is_checkmate) {
+		if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
+			if (brd.selected == -1) {
+				brd.selected = hx + hy * 8;
+				// int selected_piece_color = (brd.pieces[brd.selected] & ChessBoard::COLOR_BIT);
+				ChessBoard::Color pieceColor = get_color(brd, brd.selected);
+				if (is_empty(brd, brd.selected) || (pieceColor != brd.current_turn)) {
+					brd.selected = -1;
+				}
+			}
+			else {
+				if (brd.selected == (hx + hy * 8)) {
+					brd.selected = -1;
+				}
+				else if (is_own(brd, brd.selected, hx + hy * 8)) {
+					brd.selected = hx + hy * 8;
+				}
+			}
+		}
+
+
+		if (brd.selected != -1) {
+			get_valid_moves(brd, brd.highlights, brd.move_count, brd.selected);
+			if (brd.move_count == 0) {
 				brd.selected = -1;
 			}
 		}
 		else {
-			if (brd.selected == (hx + hy * 8)) {
-				brd.selected = -1;
-			}
-			else if (is_own(brd, brd.selected, hx + hy * 8)) {
-				brd.selected = hx + hy * 8;
-			}
-		}
-	}
-
-	brd.move_count = 0;
-	for (int i = 0; i < 64; i++)
-		brd.highlights[i] = -1;
-
-	if (brd.selected != -1) {
-		get_valid_moves(brd, brd.highlights, brd.move_count, brd.selected);
-		if (brd.move_count == 0) {
-			brd.selected = -1;
-		}
-	}
-	else {
-		for (int i = 0; i < brd.move_count; i++) {
-			brd.highlights[i] = -1;
-		}
-	}
-
-	// Do the move
-	if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
-		// Move target
-		int move_target = hx + hy * 8;
-		if (in_range(move_target, 0, 64)) {
 			for (int i = 0; i < brd.move_count; i++) {
-				if ((brd.highlights[i] != -1) && (brd.highlights[i] == move_target)) {
-					do_move(brd, brd.selected, move_target);
-					brd.is_check = false;
-					if (is_in_check(brd, brd.current_turn)) {
-						brd.is_check = true;
+				brd.highlights[i] = -1;
+			}
+		}
+
+		// Do the move
+		if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
+			// Move target
+			int move_target = hx + hy * 8;
+			if (in_range(move_target, 0, 64)) {
+				for (int i = 0; i < brd.move_count; i++) {
+					if ((brd.highlights[i] != -1) && (brd.highlights[i] == move_target)) {
+						do_move(brd, brd.selected, move_target);
+						brd.is_check = false;
+						if (is_in_check(brd, brd.current_turn)) {
+							brd.is_check = true;
+							std::cout << "Check!" << std::endl;
+						}
+						if (is_in_checkmate(brd, brd.current_turn)) {
+							brd.is_checkmate = true;
+							std::cout << "Game over!" << std::endl;
+						}
+						break;
 					}
-					break;
 				}
 			}
 		}
+	}
+	else {
+		brd.selected = -1;
 	}
 
 	if (on_screen) {
@@ -827,6 +853,10 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 	}
 	else {
 		brd.hovered_square = -1;
+	}
+
+	if (key_was_released(cin, pin, GLFW_KEY_R)) {
+		init(brd);
 	}
 }
 
