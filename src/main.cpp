@@ -30,7 +30,7 @@ struct ChessBoard {
 	int move_count = 0;
 	bool is_check{ false };
 	int white_king_position{ 0 }, black_king_position{ 0 };
-	int hovered_square{-1};
+	int hovered_square{ -1 };
 };
 
 enum {
@@ -51,6 +51,18 @@ struct Position {
 	int y() const { return p / 8; }
 	bool is_valid() { return (x() >= 0) && (x() < 8) && (y() >= 0) && (y() < 8); }
 };
+
+ChessBoard::Color get_color(const ChessBoard& brd, Position p) {
+	ChessBoard::Color color = (ChessBoard::Color)(brd.pieces[p.p] & ChessBoard::COLOR_BIT);
+	return color;
+}
+ChessBoard::PieceType get_type(const ChessBoard& brd, Position p) {
+	ChessBoard::PieceType type = (ChessBoard::PieceType)(brd.pieces[p.p] & ChessBoard::PIECE_BITS);
+	return type;
+}
+int get_piece(const ChessBoard& brd, Position p) {
+	return brd.pieces[p.p];
+}
 
 void init_fen(ChessBoard& brd, const char* fen) {
 	brd.selected = -1;
@@ -319,10 +331,8 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 		return x == (brd.selected % 8) && y == (brd.selected / 8);
 	};
 	auto is_move = [&](int x, int y) {
-		for (int i = 0; i < 64; i++) {
-			if (brd.highlights[i] == -1)
-				break;
-			if (brd.highlights[i] == x + y * 8) {
+		for (int i = 0; i < brd.move_count; i++) {
+			if (brd.highlights[i] == (x + y * 8)) {
 				return true;
 			}
 		}
@@ -334,18 +344,18 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 	auto get_color = [&](int x, int y) -> glm::vec3 {
 		// Checked king
 		if (is_checked_king(x, y)) {
-			return {0.9f, 0.1f, 0.1f};
+			return { 0.9f, 0.1f, 0.1f };
 		}
 		// Mouse hover
 		if (is_hovered(x, y)) {
-			return {0.7f, 0.3f, 0.3f};
+			return { 0.7f, 0.3f, 0.3f };
 		}
 		// Possible moves
 		if (is_move(x, y)) {
-			return {0.5f, 0.3f, 0.3f};
+			return { 0.5f, 0.3f, 0.3f };
 		}
 		// Selected piece
-		if (is_selected(x,y)) {
+		if (is_selected(x, y)) {
 			return { 0.9f, 0.4f, 0.4f };
 		}
 		// Background
@@ -359,8 +369,8 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 		int py = (i / 8) * h + offy;
 		auto col = get_color((i % 8), (i / 8));
 		draw_rect(px, py, w, h, sw, sh, col);
-		if ((brd.pieces[i] & ChessBoard::PIECE_BITS) != 0)
-			draw_piece(px, py, w, h, sw, sh, brd.pieces[i]);
+		if (get_type(brd, i) != 0)
+			draw_piece(px, py, w, h, sw, sh, get_piece(brd, i));
 	}
 }
 
@@ -368,53 +378,67 @@ bool in_range(int val, int min_inc, int max_ex) {
 	return (val >= min_inc) && (val < max_ex);
 }
 
-bool is_enemy(const ChessBoard& brd, Position self, Position p) {
-	return ((brd.pieces[self.p] & ChessBoard::COLOR_BIT) != (brd.pieces[p.p] & ChessBoard::COLOR_BIT));
+bool is_empty(const ChessBoard& brd, Position p) {
+	return get_type(brd, p) == ChessBoard::None;
+	// return ((brd.pieces[p.p] & ChessBoard::PIECE_BITS) == 0);
 };
 
-bool is_empty(const ChessBoard& brd, Position p) {
-	return ((brd.pieces[p.p] & ChessBoard::PIECE_BITS) == 0);
+bool is_enemy(const ChessBoard& brd, Position self, Position p) {
+	return get_color(brd, self) != get_color(brd, p) && !is_empty(brd, p);
+	// ((brd.pieces[self.p] & ChessBoard::COLOR_BIT) != (brd.pieces[p.p] & ChessBoard::COLOR_BIT));
 };
+
 
 bool is_enemy_or_empty(const ChessBoard& brd, int self, int p) {
 	return is_enemy(brd, self, p) || is_empty(brd, p);
+	// return is_enemy(brd, self, p) || is_empty(brd, p);
 };
 
 bool is_own(const ChessBoard& brd, int self, int p) {
 	return
-		((brd.pieces[self] & ChessBoard::COLOR_BIT) == (brd.pieces[p] & ChessBoard::COLOR_BIT)) &&
-		((brd.pieces[p] & ChessBoard::PIECE_BITS) != ChessBoard::None);
+		get_color(brd, self) == get_color(brd, p) &&
+		get_type(brd, self) != ChessBoard::None &&
+		get_type(brd, p) != ChessBoard::None;
+	// ((brd.pieces[self] & ChessBoard::COLOR_BIT) == (brd.pieces[p] & ChessBoard::COLOR_BIT)) &&
+	// ((brd.pieces[p] & ChessBoard::PIECE_BITS) != ChessBoard::None);
 };
 
 bool is_in_check(const ChessBoard& brd, ChessBoard::Color c);
 
-void do_move(ChessBoard& brd, Position from_pos, int to_pos);
+void do_move(ChessBoard& brd, Position from_pos, Position to_pos);
 
-bool resolves_check(const ChessBoard& brd, Position pos, int move) {
+bool resolves_check(const ChessBoard& brd, Position pos, Position target) {
 	ChessBoard copy = brd;
-	copy.is_check = false;
-	do_move(copy, pos, pos.offset(move).p);
-	copy.move_count = 0;
-	if (is_in_check(copy, brd.current_turn)) {
+	// copy.is_check = false;
+	auto turn = copy.current_turn;
+	do_move(copy, pos, target);
+	// copy.move_count = 0;
+	if (is_in_check(copy, turn)) {
 		return false;
 	}
 	return true;
 };
 
-bool causes_check_on_self(Position pos, int move) {
+bool causes_check_on_self(const ChessBoard& brd, Position pos, Position target) {
+	ChessBoard copy = brd;
+	copy.is_check = false;
+	copy.selected = -1;
+	do_move(copy, pos, target);
+	// copy.move_count = 0;
+	if (is_in_check(copy, brd.current_turn)) {
+		return true;
+	}
 	return false;
 };
 
 void add_move(const ChessBoard& brd, int* move_list, int& move_count, Position pos, int move) {
 	Position targ = pos.offset(move);
-	// Check that a move resolves check if in check before adding it to valid moves
-	if (brd.is_check) {
-		if (!resolves_check(brd, pos, move)) {
-			return;
-		}
+	if (!is_empty(brd, targ) && (get_color(brd, pos) == get_color(brd, targ))) {
+		return;
 	}
+
 	assert(move_count < 64);
-	move_list[move_count] = pos.offset(move).p;
+	move_list[move_count] = targ.p;
 	move_count += 1;
 };
 
@@ -583,15 +607,15 @@ void get_rook_moves(const ChessBoard& brd, int* move_list, int& move_count, Posi
 		if (max_moves_direction > 0) {
 			Position tp = p;
 			for (int dist = 0; dist < max_moves_direction; dist++) {
-				tp = tp.offset(possible_dirs[i]);
-				if (!is_empty(brd, tp.p) && is_enemy(brd, p, tp)) {
-					add_move(brd, move_list, move_count, p, tp.p - p.p);
+				// tp = tp.offset(possible_dirs[i]);
+				if (!is_empty(brd, p.p + possible_dirs[i] * (dist + 1)) && is_enemy(brd, p, p.p + possible_dirs[i] * (dist + 1))) {
+					add_move(brd, move_list, move_count, p, possible_dirs[i] * (dist + 1));
 					break;
 				}
-				if (is_own(brd, p.p, tp.p)) {
+				if (is_own(brd, p.p, p.p + possible_dirs[i] * (dist + 1))) {
 					break;
 				}
-				add_move(brd, move_list, move_count, p, tp.p - p.p);
+				add_move(brd, move_list, move_count, p, possible_dirs[i] * (dist + 1));
 			}
 		}
 	}
@@ -606,36 +630,58 @@ void get_king_moves(const ChessBoard& brd, int* move_list, int& move_count, Posi
 		}
 	}
 };
-void get_moves(const ChessBoard& brd, int* move_list, int& move_count, int p) {
-	if ((brd.pieces[p] & ChessBoard::PIECE_BITS) == ChessBoard::Pawn)
+
+void get_moves(const ChessBoard& brd, int* move_list, int& move_count, Position p) {
+	auto type = get_type(brd, p);
+	if (type == ChessBoard::Pawn)
 		get_pawn_moves(brd, move_list, move_count, p);
-	else if ((brd.pieces[p] & ChessBoard::PIECE_BITS) == ChessBoard::Knight)
+	else if (type == ChessBoard::Knight)
 		get_knight_moves(brd, move_list, move_count, p);
-	else if ((brd.pieces[p] & ChessBoard::PIECE_BITS) == ChessBoard::Bishop)
+	else if (type == ChessBoard::Bishop)
 		get_bishop_moves(brd, move_list, move_count, p);
-	else if ((brd.pieces[p] & ChessBoard::PIECE_BITS) == ChessBoard::Queen)
+	else if (type == ChessBoard::Queen)
 		get_queen_moves(brd, move_list, move_count, p);
-	else if ((brd.pieces[p] & ChessBoard::PIECE_BITS) == ChessBoard::King)
+	else if (type == ChessBoard::King)
 		get_king_moves(brd, move_list, move_count, p);
-	else if ((brd.pieces[p] & ChessBoard::PIECE_BITS) == ChessBoard::Rook)
+	else if (type == ChessBoard::Rook)
 		get_rook_moves(brd, move_list, move_count, p);
 	else {
 		move_count = 0;
 	}
 };
 
+void get_valid_moves(const ChessBoard& brd, int* move_list, int& move_count, Position p) {
+	get_moves(brd, move_list, move_count, p);
+	int valid_move_count = 0;
+	for (int mv_i = 0; mv_i < move_count; mv_i++) {
+		if (brd.is_check) {
+			if (resolves_check(brd, p, move_list[mv_i])) {
+				move_list[valid_move_count] = move_list[mv_i];
+				valid_move_count++;
+			}
+		}
+		else {
+			if (!causes_check_on_self(brd, p, move_list[mv_i])) {
+				move_list[valid_move_count] = move_list[mv_i];
+				valid_move_count++;
+			}
+		}
+	}
+	move_count = valid_move_count;
+}
+
 bool is_in_check(const ChessBoard& brd, ChessBoard::Color c) {
+	Position king_location = (c == ChessBoard::White) ? brd.white_king_position : brd.black_king_position;
+	ChessBoard::Color opposingColor = (c == ChessBoard::White) ? ChessBoard::Black : ChessBoard::White;
 	for (int i = 0; i < 64; i++) {
 		Position from(i);
-		if (((brd.pieces[i] & ChessBoard::COLOR_BIT) != c) && (brd.pieces[i] != 0)) {
+		if (!is_empty(brd, i) && ((get_color(brd, from) == opposingColor))) {
 			int piece_move_list[64]{ -1 };
 			int piece_move_count = 0;
-			get_moves(brd, piece_move_list, piece_move_count, from.p);
+			get_moves(brd, piece_move_list, piece_move_count, from);
 			for (int mv_i = 0; mv_i < piece_move_count; mv_i++) {
 				Position target(piece_move_list[mv_i]);
-
-				int king_location = (c == ChessBoard::Color::White) ? brd.white_king_position : brd.black_king_position;
-				if (target.p == king_location) {
+				if (target.p == king_location.p) {
 					return true;
 				}
 			}
@@ -644,8 +690,8 @@ bool is_in_check(const ChessBoard& brd, ChessBoard::Color c) {
 	return false;
 };
 
-void do_move(ChessBoard& brd, Position from_pos, int to_pos) {
-	if (from_pos.p == to_pos)
+void do_move(ChessBoard& brd, Position from_pos, Position to_pos) {
+	if (from_pos.p == to_pos.p)
 		return;
 	// for (int k = 0; k < 64; k++) {
 		// Check if valid move
@@ -654,11 +700,11 @@ void do_move(ChessBoard& brd, Position from_pos, int to_pos) {
 				// Was valid so do the move
 	if ((brd.pieces[from_pos.p] & ChessBoard::PIECE_BITS) == ChessBoard::Pawn) {
 		// Was a pawn
-		int py = to_pos / 8;
+		int py = to_pos.y();
 		int dy = from_pos.y() > py ? from_pos.y() - py : py - from_pos.y();
 		if (dy == 2) {
 			// Was double move so update en passant target
-			brd.en_passant_target = to_pos;
+			brd.en_passant_target = to_pos.p;
 		}
 		else {
 			// Was single move so check wether it was en passant capture
@@ -678,13 +724,13 @@ void do_move(ChessBoard& brd, Position from_pos, int to_pos) {
 	}
 	// Update king positions if king was moved
 	if (brd.pieces[from_pos.p] == (ChessBoard::Color::White | ChessBoard::King)) {
-		brd.white_king_position = to_pos;
+		brd.white_king_position = to_pos.p;
 	}
 	if (brd.pieces[from_pos.p] == (ChessBoard::Color::Black | ChessBoard::King)) {
-		brd.black_king_position = to_pos;
+		brd.black_king_position = to_pos.p;
 	}
 
-	brd.pieces[to_pos] = brd.pieces[from_pos.p];
+	brd.pieces[to_pos.p] = brd.pieces[from_pos.p];
 	brd.pieces[from_pos.p] = 0;
 
 	if (brd.current_turn == ChessBoard::Color::Black) {
@@ -726,8 +772,9 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 	if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
 		if (brd.selected == -1) {
 			brd.selected = hx + hy * 8;
-			int selected_piece_color = (brd.pieces[brd.selected] & ChessBoard::COLOR_BIT);
-			if (is_empty(brd, brd.selected) || (selected_piece_color != brd.current_turn)) {
+			// int selected_piece_color = (brd.pieces[brd.selected] & ChessBoard::COLOR_BIT);
+			ChessBoard::Color pieceColor = get_color(brd, brd.selected);
+			if (is_empty(brd, brd.selected) || (pieceColor != brd.current_turn)) {
 				brd.selected = -1;
 			}
 		}
@@ -746,7 +793,7 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 		brd.highlights[i] = -1;
 
 	if (brd.selected != -1) {
-		get_moves(brd, brd.highlights, brd.move_count, brd.selected);
+		get_valid_moves(brd, brd.highlights, brd.move_count, brd.selected);
 		if (brd.move_count == 0) {
 			brd.selected = -1;
 		}
