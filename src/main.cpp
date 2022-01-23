@@ -830,13 +830,13 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 					if ((brd.highlights[i] != -1) && (brd.highlights[i] == move_target)) {
 						do_move(brd, brd.selected, move_target);
 						brd.is_check = false;
-						if (is_in_check(brd, brd.current_turn)) {
-							brd.is_check = true;
-							std::cout << "Check!" << std::endl;
-						}
 						if (is_in_checkmate(brd, brd.current_turn)) {
 							brd.is_checkmate = true;
-							std::cout << "Game over!" << std::endl;
+							std::cout << "Check mate!" << std::endl;
+						}
+						else if (is_in_check(brd, brd.current_turn)) {
+							brd.is_check = true;
+							std::cout << "Check!" << std::endl;
 						}
 						break;
 					}
