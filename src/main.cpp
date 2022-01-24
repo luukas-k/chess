@@ -22,20 +22,27 @@ struct ChessBoard {
 	};
 	constexpr static uint8_t PIECE_BITS = 0b111;
 	constexpr static uint8_t COLOR_BIT = 1 << 4;
+	// Board state
 	uint8_t pieces[8 * 8]{};
-	int8_t selected{ -1 };
 	Color current_turn = Color::White;
+	// Currently selected piece on the board or in the pawn promotion menu
+	int8_t selected{ -1 };
+	// Pawn capture information
 	int en_passant_target{ -1 };
-	int highlights[65]{};
+	// Available moves
+	int move_list[65]{};
 	int move_count = 0;
+	// King information
 	bool is_check{ false }, is_checkmate{ false };
 	int white_king_position{ 0 }, black_king_position{ 0 };
+	// Square hovered by cursor
 	int hovered_square{ -1 };
-
+	// Pawn promotion info
 	int to_be_promoted{ -1 };
 	bool wait_for_promotion_selection{ false };
 };
 
+// Directions set to offsets in an array that correspond to movements on the grid
 enum {
 	Up = 8,
 	Down = -8,
@@ -335,7 +342,7 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 	};
 	auto is_move = [&](int x, int y) {
 		for (int i = 0; i < brd.move_count; i++) {
-			if (brd.highlights[i] == (x + y * 8)) {
+			if (brd.move_list[i] == (x + y * 8)) {
 				return true;
 			}
 		}
@@ -796,7 +803,7 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 
 	brd.move_count = 0;
 	for (int i = 0; i < 64; i++)
-		brd.highlights[i] = -1;
+		brd.move_list[i] = -1;
 
 	if (!brd.is_checkmate) {
 		if (!brd.wait_for_promotion_selection) {
@@ -821,14 +828,14 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 
 
 			if (brd.selected != -1) {
-				get_valid_moves(brd, brd.highlights, brd.move_count, brd.selected);
+				get_valid_moves(brd, brd.move_list, brd.move_count, brd.selected);
 				if (brd.move_count == 0) {
 					brd.selected = -1;
 				}
 			}
 			else {
 				for (int i = 0; i < brd.move_count; i++) {
-					brd.highlights[i] = -1;
+					brd.move_list[i] = -1;
 				}
 			}
 
@@ -838,7 +845,7 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 				int move_target = hx + hy * 8;
 				if (in_range(move_target, 0, 64)) {
 					for (int i = 0; i < brd.move_count; i++) {
-						if ((brd.highlights[i] != -1) && (brd.highlights[i] == move_target)) {
+						if ((brd.move_list[i] != -1) && (brd.move_list[i] == move_target)) {
 							do_move(brd, brd.selected, move_target);
 							brd.is_check = false;
 							if (is_in_checkmate(brd, brd.current_turn)) {
