@@ -773,7 +773,7 @@ void do_move(ChessBoard& brd, Position from_pos, Position to_pos) {
 			// Was single move so check wether it was en passant capture
 			int px = to_pos.x();
 			int dx = from_pos.x() > px ? from_pos.x() - px : px - from_pos.x();
-			if ((brd.en_passant_target == to_pos.p)) {
+			if ((brd.en_passant_target + Down * dy == to_pos.p)) {
 				// Was en passant so clear en passant target and capture the pawn there
 				assert(in_range(brd.en_passant_target, 0, 64));
 				brd.pieces[brd.en_passant_target] = 0;
