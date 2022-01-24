@@ -40,6 +40,12 @@ struct ChessBoard {
 	// Pawn promotion info
 	int to_be_promoted{ -1 };
 	bool wait_for_promotion_selection{ false };
+	// Castling availability
+	bool
+		black_king_side{ true },
+		black_queen_side{ true },
+		white_king_side{ true },
+		white_queen_side{ true };
 };
 
 // Directions set to offsets in an array that correspond to movements on the grid
@@ -641,6 +647,8 @@ void get_king_moves(const ChessBoard& brd, int* move_list, int& move_count, Posi
 				add_move(brd, move_list, move_count, p, possible_dirs[i]);
 		}
 	}
+
+	// bool can_king_side_castle = 
 };
 
 void get_moves(const ChessBoard& brd, int* move_list, int& move_count, Position p) {
@@ -881,6 +889,15 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 					brd.to_be_promoted = -1;
 					brd.wait_for_promotion_selection = false;
 					brd.selected = -1;
+					brd.is_check = false;
+					if (is_in_checkmate(brd, brd.current_turn)) {
+						brd.is_checkmate = true;
+						std::cout << "Check mate!" << std::endl;
+					}
+					else if (is_in_check(brd, brd.current_turn)) {
+						brd.is_check = true;
+						std::cout << "Check!" << std::endl;
+					}
 				}
 			}
 			else {
