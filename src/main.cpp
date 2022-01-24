@@ -61,6 +61,7 @@ enum struct IgnoreInvalid { _ };
 struct Position {
 	Position(int p) : p(p) { assert(p >= 0); assert(p < 64); }
 	Position(int p, IgnoreInvalid i) : p(p) {}
+	Position(int x, int y) : Position(x + y * 8) {}
 	Position offset(int mv) { return Position(p + mv); }
 	int p{};
 	int x() const { return p % 8; }
@@ -336,7 +337,7 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 		return (x % 2 == 0 && y % 2 == 0) || (x % 2 == 1 && y % 2 == 1);
 	};
 	auto is_checked_king = [&](int x, int y) {
-		if (brd.is_check) {
+		if (brd.is_check || brd.is_checkmate) {
 			return brd.current_turn == ChessBoard::White ?
 				(brd.white_king_position == x + y * 8) :
 				(brd.black_king_position == x + y * 8);
@@ -478,7 +479,8 @@ void get_pawn_moves(const ChessBoard& brd, int* move_list, int& move_count, Posi
 		}
 	}
 	auto can_enpassant = [&](Position from, bool towards_left) {
-		if (brd.en_passant_target == -1) return false;
+		if (brd.en_passant_target == -1) 
+			return false;
 
 		Position enemy_pawn = from.offset(towards_left ? Left : Right);
 		if (towards_left) {
@@ -648,7 +650,30 @@ void get_king_moves(const ChessBoard& brd, int* move_list, int& move_count, Posi
 		}
 	}
 
-	// bool can_king_side_castle = 
+	ChessBoard::Color team = get_color(brd, p);
+	int king_row = (team == ChessBoard::White) ? 7 : 0;
+
+	bool can_king_side_castle = 
+		((team == ChessBoard::White) ? brd.white_king_side : brd.black_king_side) &&
+		(p.x() == 4) && (p.y() == king_row) &&
+		(get_piece(brd, Position(7, king_row)) == (ChessBoard::Rook | team)) &&
+		is_empty(brd, Position(5, king_row)) &&
+		is_empty(brd, Position(6, king_row));
+
+	bool can_queen_side_castle = 
+		((team == ChessBoard::White) ? brd.white_queen_side : brd.black_queen_side) &&
+		(p.x() == 4) && (p.y() == king_row) &&
+		(get_piece(brd, Position(0, king_row)) == (ChessBoard::Rook | team)) &&
+		is_empty(brd, Position(1, king_row)) &&
+		is_empty(brd, Position(2, king_row)) &&
+		is_empty(brd, Position(3, king_row));
+
+	if (can_queen_side_castle) {
+		add_move(brd, move_list, move_count, p, Left * 2);
+	}
+	if (can_king_side_castle) {
+		add_move(brd, move_list, move_count, p, Right * 2);
+	}
 };
 
 void get_moves(const ChessBoard& brd, int* move_list, int& move_count, Position p) {
@@ -671,6 +696,7 @@ void get_moves(const ChessBoard& brd, int* move_list, int& move_count, Position 
 };
 
 void get_valid_moves(const ChessBoard& brd, int* move_list, int& move_count, Position p) {
+	move_count = 0;
 	get_moves(brd, move_list, move_count, p);
 	int valid_move_count = 0;
 	for (int mv_i = 0; mv_i < move_count; mv_i++) {
@@ -696,7 +722,7 @@ bool is_in_check(const ChessBoard& brd, ChessBoard::Color c) {
 	for (int i = 0; i < 64; i++) {
 		Position from(i);
 		if (!is_empty(brd, i) && ((get_color(brd, from) == opposingColor))) {
-			int piece_move_list[64]{ -1 };
+			int piece_move_list[64]{};
 			int piece_move_count = 0;
 			get_moves(brd, piece_move_list, piece_move_count, from);
 			for (int mv_i = 0; mv_i < piece_move_count; mv_i++) {
@@ -711,13 +737,14 @@ bool is_in_check(const ChessBoard& brd, ChessBoard::Color c) {
 };
 
 bool is_in_checkmate(const ChessBoard& brd, ChessBoard::Color c) {
+	ChessBoard copy = brd;
 	Position king_location = (c == ChessBoard::White) ? brd.white_king_position : brd.black_king_position;
 	for (int i = 0; i < 64; i++) {
 		Position from(i);
-		if (!is_empty(brd, i) && ((get_color(brd, from) == c))) {
-			int piece_move_list[64]{ -1 };
+		if (!is_empty(copy, i) && ((get_color(copy, from) == c))) {
+			int piece_move_list[64]{};
 			int piece_move_count = 0;
-			get_valid_moves(brd, piece_move_list, piece_move_count, from);
+			get_valid_moves(copy, piece_move_list, piece_move_count, from);
 			if (piece_move_count != 0) {
 				return false;
 			}
@@ -744,10 +771,11 @@ void do_move(ChessBoard& brd, Position from_pos, Position to_pos) {
 		}
 		else {
 			// Was single move so check wether it was en passant capture
-			int px = from_pos.x();
+			int px = to_pos.x();
 			int dx = from_pos.x() > px ? from_pos.x() - px : px - from_pos.x();
-			if (dx == 1) {
+			if ((brd.en_passant_target == to_pos.p)) {
 				// Was en passant so clear en passant target and capture the pawn there
+				assert(in_range(brd.en_passant_target, 0, 64));
 				brd.pieces[brd.en_passant_target] = 0;
 				brd.en_passant_target = -1;
 			}
@@ -762,14 +790,40 @@ void do_move(ChessBoard& brd, Position from_pos, Position to_pos) {
 	else {
 		brd.en_passant_target = -1;
 	}
-	// Update king positions if king was moved
-	if (brd.pieces[from_pos.p] == (ChessBoard::Color::White | ChessBoard::King)) {
+
+	if (get_type(brd, from_pos) == ChessBoard::King) {
+		int dx = to_pos.x() - from_pos.x();
+		ChessBoard::Color team = get_color(brd, from_pos);
+		int king_row = (team == ChessBoard::White) ? 7 : 0;
+		if (dx == 2) {
+			brd.pieces[Position(7, king_row).p] = 0;
+			brd.pieces[Position(5, king_row).p] = ChessBoard::Rook | team;
+			assert(in_range(Position(7, king_row).p, 0, 64));
+			assert(in_range(Position(5, king_row).p, 0, 64));
+		}
+		else if (dx == -2) {
+			brd.pieces[Position(0, king_row).p] = 0;
+			brd.pieces[Position(3, king_row).p] = ChessBoard::Rook | team;
+			assert(in_range(Position(0, king_row).p, 0, 64));
+			assert(in_range(Position(3, king_row).p, 0, 64));
+		}
+
+		// Update king positions if king was moved
+		if(team == ChessBoard::White)
+			brd.white_king_position = to_pos.p;
+		else 
+			brd.black_king_position = to_pos.p;
+	}
+
+	/* if (brd.pieces[from_pos.p] == (ChessBoard::Color::White | ChessBoard::King)) {
 		brd.white_king_position = to_pos.p;
 	}
 	if (brd.pieces[from_pos.p] == (ChessBoard::Color::Black | ChessBoard::King)) {
 		brd.black_king_position = to_pos.p;
-	}
+	}*/
 
+	assert(in_range(to_pos.p, 0, 64));
+	assert(in_range(from_pos.p, 0, 64));
 	brd.pieces[to_pos.p] = brd.pieces[from_pos.p];
 	brd.pieces[from_pos.p] = 0;
 
