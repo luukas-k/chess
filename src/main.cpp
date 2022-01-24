@@ -31,6 +31,9 @@ struct ChessBoard {
 	bool is_check{ false }, is_checkmate{ false };
 	int white_king_position{ 0 }, black_king_position{ 0 };
 	int hovered_square{ -1 };
+
+	int to_be_promoted{ -1 };
+	bool wait_for_promotion_selection{ false };
 };
 
 enum {
@@ -347,7 +350,7 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 			return { 0.9f, 0.1f, 0.1f };
 		}
 		// Mouse hover
-		if (is_hovered(x, y)) {
+		if (is_hovered(x, y) && !brd.wait_for_promotion_selection) {
 			return { 0.7f, 0.3f, 0.3f };
 		}
 		// Possible moves
@@ -355,7 +358,7 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 			return { 0.5f, 0.3f, 0.3f };
 		}
 		// Selected piece
-		if (is_selected(x, y)) {
+		if (is_selected(x, y) && !brd.wait_for_promotion_selection) {
 			return { 0.9f, 0.4f, 0.4f };
 		}
 		// Background
@@ -371,6 +374,22 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 		draw_rect(px, py, w, h, sw, sh, col);
 		if (get_type(brd, i) != 0)
 			draw_piece(px, py, w, h, sw, sh, get_piece(brd, i));
+	}
+
+	if (brd.wait_for_promotion_selection) {
+		// Promotion select bg
+		draw_rect(2 * w + offx, 3.5 * h + offy, w * 4, h, sw, sh, { 0.2f, 0.2f, 0.2f });
+		// Promotion select highlight
+		if (brd.selected != -1) {
+			int selection_highlight = brd.selected;
+			draw_rect((2 + selection_highlight) * w + offx, 3.5 * h + offy, w, h, sw, sh, { 0.4f, 0.2f, 0.2f });
+		}
+		int protion_pieces[]{ ChessBoard::Queen, ChessBoard::Rook, ChessBoard::Bishop, ChessBoard::Knight };
+		for (int a = 0; a < 4; a++) {
+			int px = (2 + a) * w + offx;
+			int py = 3.5 * h + offy;
+			draw_piece(px, py, w, h, sw, sh, protion_pieces[a]);
+		}
 	}
 }
 
@@ -451,8 +470,12 @@ void get_pawn_moves(const ChessBoard& brd, int* move_list, int& move_count, Posi
 	int dir =
 		((brd.pieces[(int)p.p] & ChessBoard::COLOR_BIT) == ChessBoard::Color::Black) ?
 		Up : Down;
+	bool can_move = (dir == Up) ? (p.y() != 7) : (p.y() != 0);
 	bool can_double_move = (dir == Up) ? (p.y() == 1) : (p.y() == 6);
 
+	if (!can_move) {
+		return;
+	}
 	if (is_empty(brd, p.offset(dir))) {
 		add_move(brd, move_list, move_count, p, dir);
 		if (can_double_move && is_empty(brd, p.offset(dir * 2))) {
@@ -714,7 +737,7 @@ void do_move(ChessBoard& brd, Position from_pos, Position to_pos) {
 		// if (brd.highlights[k] != -1 && brd.highlights[k] == to_pos) {
 			// if (in_range(brd.selected, 0, 64)) {
 				// Was valid so do the move
-	if ((brd.pieces[from_pos.p] & ChessBoard::PIECE_BITS) == ChessBoard::Pawn) {
+	if (get_type(brd, from_pos) == ChessBoard::Pawn) {
 		// Was a pawn
 		int py = to_pos.y();
 		int dy = from_pos.y() > py ? from_pos.y() - py : py - from_pos.y();
@@ -733,6 +756,10 @@ void do_move(ChessBoard& brd, Position from_pos, Position to_pos) {
 			}
 			// Wasn't double move so clear en passant target
 			brd.en_passant_target = -1;
+		}
+		if ((to_pos.y() == 7) || (to_pos.y() == 0)) {
+			brd.to_be_promoted = to_pos.p;
+			brd.wait_for_promotion_selection = true;
 		}
 	}
 	else {
@@ -788,59 +815,87 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 	brd.move_count = 0;
 	for (int i = 0; i < 64; i++)
 		brd.highlights[i] = -1;
+
 	if (!brd.is_checkmate) {
-		if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
-			if (brd.selected == -1) {
-				brd.selected = hx + hy * 8;
-				// int selected_piece_color = (brd.pieces[brd.selected] & ChessBoard::COLOR_BIT);
-				ChessBoard::Color pieceColor = get_color(brd, brd.selected);
-				if (is_empty(brd, brd.selected) || (pieceColor != brd.current_turn)) {
+		if (!brd.wait_for_promotion_selection) {
+			if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
+				if (brd.selected == -1) {
+					brd.selected = hx + hy * 8;
+					// int selected_piece_color = (brd.pieces[brd.selected] & ChessBoard::COLOR_BIT);
+					ChessBoard::Color pieceColor = get_color(brd, brd.selected);
+					if (is_empty(brd, brd.selected) || (pieceColor != brd.current_turn)) {
+						brd.selected = -1;
+					}
+				}
+				else {
+					if (brd.selected == (hx + hy * 8)) {
+						brd.selected = -1;
+					}
+					else if (is_own(brd, brd.selected, hx + hy * 8)) {
+						brd.selected = hx + hy * 8;
+					}
+				}
+			}
+
+
+			if (brd.selected != -1) {
+				get_valid_moves(brd, brd.highlights, brd.move_count, brd.selected);
+				if (brd.move_count == 0) {
 					brd.selected = -1;
 				}
 			}
 			else {
-				if (brd.selected == (hx + hy * 8)) {
-					brd.selected = -1;
-				}
-				else if (is_own(brd, brd.selected, hx + hy * 8)) {
-					brd.selected = hx + hy * 8;
+				for (int i = 0; i < brd.move_count; i++) {
+					brd.highlights[i] = -1;
 				}
 			}
-		}
 
+			// Do the move
+			if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
+				// Move target
+				int move_target = hx + hy * 8;
+				if (in_range(move_target, 0, 64)) {
+					for (int i = 0; i < brd.move_count; i++) {
+						if ((brd.highlights[i] != -1) && (brd.highlights[i] == move_target)) {
+							do_move(brd, brd.selected, move_target);
+							brd.is_check = false;
+							if (is_in_checkmate(brd, brd.current_turn)) {
+								brd.is_checkmate = true;
+								std::cout << "Check mate!" << std::endl;
+							}
+							else if (is_in_check(brd, brd.current_turn)) {
+								brd.is_check = true;
+								std::cout << "Check!" << std::endl;
+							}
+							break;
+						}
+					}
+				}
+			}
 
-		if (brd.selected != -1) {
-			get_valid_moves(brd, brd.highlights, brd.move_count, brd.selected);
-			if (brd.move_count == 0) {
-				brd.selected = -1;
+			if (on_screen) {
+				brd.hovered_square = hx + hy * 8;
+			}
+			else {
+				brd.hovered_square = -1;
 			}
 		}
 		else {
-			for (int i = 0; i < brd.move_count; i++) {
-				brd.highlights[i] = -1;
-			}
-		}
-
-		// Do the move
-		if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
-			// Move target
-			int move_target = hx + hy * 8;
-			if (in_range(move_target, 0, 64)) {
-				for (int i = 0; i < brd.move_count; i++) {
-					if ((brd.highlights[i] != -1) && (brd.highlights[i] == move_target)) {
-						do_move(brd, brd.selected, move_target);
-						brd.is_check = false;
-						if (is_in_checkmate(brd, brd.current_turn)) {
-							brd.is_checkmate = true;
-							std::cout << "Check mate!" << std::endl;
-						}
-						else if (is_in_check(brd, brd.current_turn)) {
-							brd.is_check = true;
-							std::cout << "Check!" << std::endl;
-						}
-						break;
-					}
+			int sel_offx = (cin.x - offx) / w - 2;
+			int sel_y = (cin.y + h / 2 - offy) / h - 4;
+			if (sel_offx >= 0 && sel_offx <= 4 && (sel_y == 0)) {
+				brd.selected = sel_offx;
+				if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
+					int promotion_pieces[]{ ChessBoard::Queen, ChessBoard::Rook, ChessBoard::Bishop, ChessBoard::Knight };
+					ChessBoard::Color teamToPromote = brd.current_turn == ChessBoard::White ? ChessBoard::Black : ChessBoard::White;
+					brd.pieces[brd.to_be_promoted] = promotion_pieces[brd.selected] | teamToPromote;
+					brd.to_be_promoted = -1;
+					brd.wait_for_promotion_selection = false;
+					brd.selected = -1;
 				}
+			}
+			else {
+				brd.selected = -1;
 			}
 		}
 	}
@@ -848,12 +903,8 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 		brd.selected = -1;
 	}
 
-	if (on_screen) {
-		brd.hovered_square = hx + hy * 8;
-	}
-	else {
-		brd.hovered_square = -1;
-	}
+
+
 
 	if (key_was_released(cin, pin, GLFW_KEY_R)) {
 		init(brd);
@@ -891,8 +942,7 @@ int main() {
 	}, nullptr);
 
 	ChessBoard board{};
-	// init(board);
-	init_fen(board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+	init(board);
 	// init_fen(board, "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2");
 
 	glEnable(GL_BLEND);
