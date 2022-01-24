@@ -399,18 +399,15 @@ bool in_range(int val, int min_inc, int max_ex) {
 
 bool is_empty(const ChessBoard& brd, Position p) {
 	return get_type(brd, p) == ChessBoard::None;
-	// return ((brd.pieces[p.p] & ChessBoard::PIECE_BITS) == 0);
 };
 
 bool is_enemy(const ChessBoard& brd, Position self, Position p) {
 	return get_color(brd, self) != get_color(brd, p) && !is_empty(brd, p);
-	// ((brd.pieces[self.p] & ChessBoard::COLOR_BIT) != (brd.pieces[p.p] & ChessBoard::COLOR_BIT));
 };
 
 
 bool is_enemy_or_empty(const ChessBoard& brd, int self, int p) {
 	return is_enemy(brd, self, p) || is_empty(brd, p);
-	// return is_enemy(brd, self, p) || is_empty(brd, p);
 };
 
 bool is_own(const ChessBoard& brd, int self, int p) {
@@ -418,8 +415,6 @@ bool is_own(const ChessBoard& brd, int self, int p) {
 		get_color(brd, self) == get_color(brd, p) &&
 		get_type(brd, self) != ChessBoard::None &&
 		get_type(brd, p) != ChessBoard::None;
-	// ((brd.pieces[self] & ChessBoard::COLOR_BIT) == (brd.pieces[p] & ChessBoard::COLOR_BIT)) &&
-	// ((brd.pieces[p] & ChessBoard::PIECE_BITS) != ChessBoard::None);
 };
 
 bool is_in_check(const ChessBoard& brd, ChessBoard::Color c);
@@ -428,26 +423,14 @@ void do_move(ChessBoard& brd, Position from_pos, Position to_pos);
 
 bool resolves_check(const ChessBoard& brd, Position pos, Position target) {
 	ChessBoard copy = brd;
-	// copy.is_check = false;
-	auto turn = copy.current_turn;
 	do_move(copy, pos, target);
-	// copy.move_count = 0;
-	if (is_in_check(copy, turn)) {
-		return false;
-	}
-	return true;
+	return !is_in_check(copy, brd.current_turn);
 };
 
 bool causes_check_on_self(const ChessBoard& brd, Position pos, Position target) {
 	ChessBoard copy = brd;
-	copy.is_check = false;
-	copy.selected = -1;
 	do_move(copy, pos, target);
-	// copy.move_count = 0;
-	if (is_in_check(copy, brd.current_turn)) {
-		return true;
-	}
-	return false;
+	return is_in_check(copy, brd.current_turn);
 };
 
 void add_move(const ChessBoard& brd, int* move_list, int& move_count, Position pos, int move) {
@@ -455,7 +438,6 @@ void add_move(const ChessBoard& brd, int* move_list, int& move_count, Position p
 	if (!is_empty(brd, targ) && (get_color(brd, pos) == get_color(brd, targ))) {
 		return;
 	}
-
 	assert(move_count < 64);
 	move_list[move_count] = targ.p;
 	move_count += 1;
@@ -902,9 +884,6 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 	else {
 		brd.selected = -1;
 	}
-
-
-
 
 	if (key_was_released(cin, pin, GLFW_KEY_R)) {
 		init(brd);
