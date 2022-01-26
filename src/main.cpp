@@ -692,7 +692,7 @@ void get_king_moves(const ChessBoard& brd, int* move_list, int& move_count, Posi
 				auto target = p.offset(possible_dirs[i]);
 				int dx = target.x() > p.x() ? target.x() - p.x() : p.x() - target.x();
 				int dy = target.y() > p.y() ? target.y() - p.y() : p.y() - target.y();
-				if ((dx == 1) || (dy == 1)) {
+				if ((dx == 1 && dy == 0) || (dy == 1 && dx == 0) || (dy == 1 && dx == 1)) {
 					add_move(brd, move_list, move_count, p, possible_dirs[i]);
 				}
 			}
@@ -1049,7 +1049,7 @@ int main() {
 
 	ChessBoard board{};
 	init(board);
-	// init_fen(board, "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2");
+	init_fen(board, "2n1RR2/p1p1PQp1/3N1r1k/rbBP3P/1Pp1K3/pp1Pb2P/P1p1Pq1p/1N1n4 w - - 0 1");
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
