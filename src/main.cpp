@@ -440,11 +440,12 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 			int selection_highlight = brd.selected;
 			draw_rect((2 + selection_highlight) * w + offx, 3.5 * h + offy, w, h, sw, sh, { 0.4f, 0.2f, 0.2f });
 		}
+		int team = brd.current_turn == ChessBoard::White ? ChessBoard::Black : ChessBoard::White;;
 		int protion_pieces[]{ ChessBoard::Queen, ChessBoard::Rook, ChessBoard::Bishop, ChessBoard::Knight };
 		for (int a = 0; a < 4; a++) {
 			int px = (2 + a) * w + offx;
 			int py = 3.5 * h + offy;
-			draw_piece(px, py, w, h, sw, sh, protion_pieces[a]);
+			draw_piece(px, py, w, h, sw, sh, protion_pieces[a] | team);
 		}
 	}
 }
