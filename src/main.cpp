@@ -3,7 +3,7 @@
 #include <iostream>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stbi.h"
+#include <stb_image.h>
 
 struct Vec3 {
 	float x, y, z;

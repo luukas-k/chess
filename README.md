@@ -8,9 +8,9 @@ A simple chess game made with glfw and opengl. Uses stbi to load images. Some ch
 
 1. Installing dependencies with vcpkg
 
-Install glfw3 and glad
+Install glfw3, glad and stb
 ```
-vcpkg install glfw3:x64-windows-static glad:x64-windows
+vcpkg install glfw3:x64-windows-static glad:x64-windows stb:x64-windows
 ```
 
 2. Generating project
