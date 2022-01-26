@@ -1,10 +1,13 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
 #include <iostream>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stbi.h"
+
+struct Vec3 {
+	float x, y, z;
+};
 
 struct ChessBoard {
 	enum PieceType {
@@ -319,7 +322,7 @@ Image create_image() {
 	return img;
 }
 
-void draw_rect(int x, int y, int w, int h, int sw, int sh, glm::vec3 col) {
+void draw_rect(int x, int y, int w, int h, int sw, int sh, Vec3 col) {
 	static Rect rr = create_rect();
 	static Shader s = create_shader();
 	static Image pt = create_image();
@@ -328,7 +331,7 @@ void draw_rect(int x, int y, int w, int h, int sw, int sh, glm::vec3 col) {
 	glUniform2f(glGetUniformLocation(s.prog, "pos"), (float)x / (float)sw, (float)y / (float)sh);
 	glUniform2f(glGetUniformLocation(s.prog, "scale"), (float)w / (float)sw, (float)h / (float)sh);
 
-	glUniform3f(glGetUniformLocation(s.prog, "color"), col.r, col.g, col.b);
+	glUniform3f(glGetUniformLocation(s.prog, "color"), col.x, col.y, col.z);
 	glUniform1f(glGetUniformLocation(s.prog, "color_fac"), 1.f);
 
 	glBindVertexArray(rr.vao);
@@ -397,7 +400,7 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 	auto is_hovered = [&](int x, int y) {
 		return brd.hovered_square == (x + y * 8);
 	};
-	auto get_color = [&](int x, int y) -> glm::vec3 {
+	auto get_color = [&](int x, int y) -> Vec3 {
 		// Checked king
 		if (is_checked_king(x, y)) {
 			return { 0.9f, 0.1f, 0.1f };
