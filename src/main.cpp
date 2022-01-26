@@ -1049,7 +1049,7 @@ int main() {
 
 	ChessBoard board{};
 	init(board);
-	init_fen(board, "2n1RR2/p1p1PQp1/3N1r1k/rbBP3P/1Pp1K3/pp1Pb2P/P1p1Pq1p/1N1n4 w - - 0 1");
+	// init_fen(board, "2n1RR2/p1p1PQp1/3N1r1k/rbBP3P/1Pp1K3/pp1Pb2P/P1p1Pq1p/1N1n4 w - - 0 1");
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
