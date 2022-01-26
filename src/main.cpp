@@ -159,16 +159,55 @@ void init_fen(ChessBoard& brd, const char* fen) {
 	}
 	// Castling availability
 	const char* castling = fen + i + 2 + 2;
-	//if (castling[0] == '-') {
-	//	// No castling available
-	//}
-	//else {
+	auto parse_castling = [&](char c) {
+		switch (c) {
+		case 'K': brd.white_king_side = true; return true;
+		case 'Q': brd.white_queen_side = true; return true;
+		case 'k': brd.black_king_side = true; return true;
+		case 'q': brd.black_queen_side = true; return true;
+		}
+		assert(false);
+		return false;
+	};
+	brd.black_king_side = false;
+	brd.black_queen_side = false;
+	brd.white_king_side = false;
+	brd.white_queen_side = false;
 
-	//}
+	const char* en_passant_target = castling + 1;
+	if (castling[0] == '-') {} // No castling
+	else if(parse_castling(castling[0]) && 
+			castling[1] == ' ') { en_passant_target += 1; }
+	else if(parse_castling(castling[0]) && 
+			parse_castling(castling[1]) && 
+			castling[2] == ' ') { en_passant_target += 2; }
+	else if(parse_castling(castling[0]) && 
+			parse_castling(castling[1]) && 
+			parse_castling(castling[2]) && 
+			castling[3] == ' ') { en_passant_target += 3; }
+	else if(parse_castling(castling[0]) && 
+			parse_castling(castling[1]) && 
+			parse_castling(castling[2]) && 
+			parse_castling(castling[3]) && 
+			castling[4] == ' ') { en_passant_target += 4; }
+	else {
+		assert(false);
+	}
+
+	if (en_passant_target[0] != '-') {
+		char x = en_passant_target[0] - 'a';
+		char y = en_passant_target[1] - '1';
+		brd.en_passant_target = x + y * 8;
+	}
+	else {
+		brd.en_passant_target = -1;
+	}
+
 	return;
 }
 
 void init(ChessBoard& brd) {
+	brd = ChessBoard{};
 	init_fen(brd, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 }
 
@@ -645,8 +684,14 @@ void get_king_moves(const ChessBoard& brd, int* move_list, int& move_count, Posi
 	int possible_dir_count = 8;
 	for (int i = 0; i < possible_dir_count; i++) {
 		if (is_valid(p, possible_dirs[i])) {
-			if (is_empty(brd, p.offset(possible_dirs[i]).p) || (!is_empty(brd, p.offset(possible_dirs[i]).p) && is_enemy(brd, p, p.offset(possible_dirs[i]))))
-				add_move(brd, move_list, move_count, p, possible_dirs[i]);
+			if (is_empty(brd, p.offset(possible_dirs[i]).p) || (!is_empty(brd, p.offset(possible_dirs[i]).p) && is_enemy(brd, p, p.offset(possible_dirs[i])))) {
+				auto target = p.offset(possible_dirs[i]);
+				int dx = target.x() > p.x() ? target.x() - p.x() : p.x() - target.x();
+				int dy = target.y() > p.y() ? target.y() - p.y() : p.y() - target.y();
+				if ((dx == 1) || (dy == 1)) {
+					add_move(brd, move_list, move_count, p, possible_dirs[i]);
+				}
+			}
 		}
 	}
 
@@ -912,7 +957,7 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 							brd.is_check = false;
 							if (is_in_checkmate(brd, brd.current_turn)) {
 								brd.is_checkmate = true;
-								std::cout << "Check mate!" << std::endl;
+								std::cout << "Checkmate!" << std::endl;
 							}
 							else if (is_in_check(brd, brd.current_turn)) {
 								brd.is_check = true;
