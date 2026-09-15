@@ -1,6 +1,13 @@
+#ifdef __EMSCRIPTEN__
+#include <GLES3/gl3.h>
+#include <emscripten/emscripten.h>
+#else
 #include <glad/gl.h>
+#endif
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <string>
+#include <cstdint>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -244,9 +251,19 @@ Rect create_rect() {
 
 struct Shader {
 	uint32_t prog, vs, fs;
+
+	int
+		loc_pos,
+		loc_scale,
+		loc_tex_pos,
+		loc_tex_scale,
+		loc_tex,
+		loc_color,
+		loc_color_fac;
 };
 
 Shader create_shader() {
+	#ifndef __EMSCRIPTEN__
 	const char* vs_src = R"GLSL(#version 330 core
 
 layout(location = 0) in vec2 vPos;
@@ -279,6 +296,44 @@ void main(){
 }
 
 )GLSL";
+	#else
+	const char* vs_src =R"GLSL(#version 300 es
+	
+	precision highp float;
+
+	layout(location = 0) in vec2 vPos;
+
+	uniform vec2 pos;
+	uniform vec2 scale;
+
+	out vec2 fUV;
+
+	void main() {
+		gl_Position = vec4((vPos * scale + pos) * 2.0 - vec2(1.0), 0.0, 1.0);
+		fUV = vPos;
+	}
+	
+	)GLSL";
+	const char* fs_src =R"GLSL(#version 300 es
+
+	precision highp float;
+	
+	in vec2 fUV;
+	out vec4 fColor;
+
+	uniform vec2 tex_pos;
+	uniform vec2 tex_scale; 
+	uniform sampler2D tex;
+	uniform vec3 color; 
+	uniform float color_fac;
+
+	void main(){
+		vec2 uv = fUV * tex_scale + tex_pos;
+		fColor = texture(tex, vec2(uv.x, 1.0 - uv.y)) * (1.0 - color_fac) + color_fac * vec4(color, 1.0);
+	}
+
+	)GLSL";
+	#endif
 
 	Shader s{};
 	s.prog = glCreateProgram();
@@ -295,6 +350,33 @@ void main(){
 
 	glLinkProgram(s.prog);
 
+	int len = 0;
+	glGetProgramiv(s.prog, GL_INFO_LOG_LENGTH, &len);
+	if (len > 0){
+		std::string log;
+		log.resize((size_t)len);
+		glGetProgramInfoLog(s.prog, log.size(), &len, (char*)log.data());
+		std::cout << log << "\n";
+	}
+
+	s.loc_pos = glGetUniformLocation(s.prog, "pos");
+	s.loc_scale = glGetUniformLocation(s.prog, "scale");
+	s.loc_tex_pos = glGetUniformLocation(s.prog, "tex_pos");
+	s.loc_tex_scale = glGetUniformLocation(s.prog, "tex_scale");
+	s.loc_tex = glGetUniformLocation(s.prog, "tex");
+	s.loc_color = glGetUniformLocation(s.prog, "color");
+	s.loc_color_fac = glGetUniformLocation(s.prog, "color_fac");
+
+	std::cout
+		<< "positions\n"
+		<< s.loc_pos << "\n" 
+		<< s.loc_scale << "\n" 
+		<< s.loc_tex_pos << "\n" 
+		<< s.loc_tex_scale << "\n" 
+		<< s.loc_tex << "\n" 
+		<< s.loc_color << "\n" 
+		<< s.loc_color_fac << "\n";
+
 	return s;
 }
 
@@ -306,58 +388,61 @@ Image create_image() {
 	int w{}, h{}, c{};
 	auto data = stbi_load("assets/pieces.png", &w, &h, &c, 4);
 
+	std::cout << "loaded " << w << "x" << h << "\n";
+
 	Image img{};
 	glGenTextures(1, &img.tex);
 	glBindTexture(GL_TEXTURE_2D, img.tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	
+	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_REPEAT);
 
 	stbi_image_free(data);
 
 	return img;
 }
 
-void draw_rect(int x, int y, int w, int h, int sw, int sh, Vec3 col) {
-	static Rect rr = create_rect();
-	static Shader s = create_shader();
-	static Image pt = create_image();
+void draw_rect(Rect& rr, Shader& s, Image& pt, int x, int y, int w, int h, int sw, int sh, Vec3 col) {
 	glUseProgram(s.prog);
 
-	glUniform2f(glGetUniformLocation(s.prog, "pos"), (float)x / (float)sw, (float)y / (float)sh);
-	glUniform2f(glGetUniformLocation(s.prog, "scale"), (float)w / (float)sw, (float)h / (float)sh);
+	glBindTexture(GL_TEXTURE_2D, pt.tex);
+	glUniform1i(s.loc_tex, 0);
+	
+	glUniform2f(s.loc_pos, (float)x / (float)sw, (float)y / (float)sh);
+	glUniform2f(s.loc_scale, (float)w / (float)sw, (float)h / (float)sh);
 
-	glUniform3f(glGetUniformLocation(s.prog, "color"), col.x, col.y, col.z);
-	glUniform1f(glGetUniformLocation(s.prog, "color_fac"), 1.f);
+	glUniform3f(s.loc_color, col.x, col.y, col.z);
+	glUniform1f(s.loc_color_fac, 1.f);
 
 	glBindVertexArray(rr.vao);
 	glDrawArrays(GL_TRIANGLES, 0, 6);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void draw_piece(int x, int y, int w, int h, int sw, int sh, uint8_t piece) {
-	static Rect rr = create_rect();
-	static Shader s = create_shader();
-	static Image pt = create_image();
+void draw_piece(Rect& rr, Shader& s, Image& pt, int x, int y, int w, int h, int sw, int sh, uint8_t piece) {
 	glUseProgram(s.prog);
 
-	glUniform2f(glGetUniformLocation(s.prog, "pos"), (float)x / (float)sw, (float)y / (float)sh);
-	glUniform2f(glGetUniformLocation(s.prog, "scale"), (float)w / (float)sw, (float)h / (float)sh);
+	glUniform2f(s.loc_pos, (float)x / (float)sw, (float)y / (float)sh);
+	glUniform2f(s.loc_scale, (float)w / (float)sw, (float)h / (float)sh);
 
-	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, pt.tex);
-	glUniform1i(glGetUniformLocation(s.prog, "tex"), 0);
+	glUniform1i(s.loc_tex, 0);
 	float xoff = ((piece & ChessBoard::PIECE_BITS) - 1) * (1.f / 6.f);
 	float yoff = (((piece & ChessBoard::COLOR_BIT)) == ChessBoard::Color::White) * 1.f / 2.f;
-	glUniform2f(glGetUniformLocation(s.prog, "tex_pos"), xoff, yoff);
-	glUniform2f(glGetUniformLocation(s.prog, "tex_scale"), 1.f / 6.f, 1.f / 2.f);
-	glUniform1f(glGetUniformLocation(s.prog, "color_fac"), 0.f);
+	glUniform2f(s.loc_tex_pos, xoff, yoff);
+	glUniform2f(s.loc_tex_scale, 1.f / 6.f, 1.f / 2.f);
+	glUniform1f(s.loc_color_fac, 0.f);
 
 	glBindVertexArray(rr.vao);
 	glDrawArrays(GL_TRIANGLES, 0, 6);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 struct Input {
@@ -374,7 +459,7 @@ bool button_was_released(const Input& current, const Input& prev, int btn) {
 	return current.btns[btn] == false && prev.btns[btn] == true;
 }
 
-void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw, int sh) {
+void draw_board(Rect& rr, Shader& s, Image& pt, const ChessBoard& brd, int offx, int offy, int w, int h, int sw, int sh) {
 	auto is_light_square = [](int x, int y) {
 		return (x % 2 == 0 && y % 2 == 0) || (x % 2 == 1 && y % 2 == 1);
 	};
@@ -427,25 +512,25 @@ void draw_board(const ChessBoard& brd, int offx, int offy, int w, int h, int sw,
 		int px = (i % 8) * w + offx;
 		int py = (i / 8) * h + offy;
 		auto col = get_color((i % 8), (i / 8));
-		draw_rect(px, py, w, h, sw, sh, col);
+		draw_rect(rr, s, pt, px, py, w, h, sw, sh, col);
 		if (get_type(brd, i) != 0)
-			draw_piece(px, py, w, h, sw, sh, get_piece(brd, i));
+			draw_piece(rr, s, pt, px, py, w, h, sw, sh, get_piece(brd, i));
 	}
 
 	if (brd.wait_for_promotion_selection) {
 		// Promotion select bg
-		draw_rect(2 * w + offx, 3.5 * h + offy, w * 4, h, sw, sh, { 0.2f, 0.2f, 0.2f });
+		draw_rect(rr, s, pt, 2 * w + offx, 3.5 * h + offy, w * 4, h, sw, sh, { 0.2f, 0.2f, 0.2f });
 		// Promotion select highlight
 		if (brd.selected != -1) {
 			int selection_highlight = brd.selected;
-			draw_rect((2 + selection_highlight) * w + offx, 3.5 * h + offy, w, h, sw, sh, { 0.4f, 0.2f, 0.2f });
+			draw_rect(rr, s, pt, (2 + selection_highlight) * w + offx, 3.5 * h + offy, w, h, sw, sh, { 0.4f, 0.2f, 0.2f });
 		}
 		int team = brd.current_turn == ChessBoard::White ? ChessBoard::Black : ChessBoard::White;;
 		int protion_pieces[]{ ChessBoard::Queen, ChessBoard::Rook, ChessBoard::Bishop, ChessBoard::Knight };
 		for (int a = 0; a < 4; a++) {
 			int px = (2 + a) * w + offx;
 			int py = 3.5 * h + offy;
-			draw_piece(px, py, w, h, sw, sh, protion_pieces[a] | team);
+			draw_piece(rr, s, pt, px, py, w, h, sw, sh, protion_pieces[a] | team);
 		}
 	}
 }
@@ -1017,7 +1102,7 @@ void process_input(ChessBoard& brd, const Input& cin, const Input& pin, int sw, 
 	}
 }
 
-void draw(ChessBoard& brd, int sw, int sh) {
+void draw(Rect& rr, Shader& s, Image& pt, ChessBoard& brd, int sw, int sh) {
 	int h = 0;
 	int w = 0;
 	int offx = 0;
@@ -1032,7 +1117,7 @@ void draw(ChessBoard& brd, int sw, int sh) {
 		h = w;
 		offy = (sh - h * 8) / 2;
 	}
-	draw_board(brd, offx, offy, w, h, sw, sh);
+	draw_board(rr, s, pt, brd, offx, offy, w, h, sw, sh);
 }
 
 int main() {
@@ -1040,13 +1125,15 @@ int main() {
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 	GLFWwindow* window = glfwCreateWindow(1280, 720, "Chess", nullptr, nullptr);
 	glfwMakeContextCurrent(window);
+	#ifndef __EMSCRIPTEN__
 	gladLoadGL((GLADloadfunc)glfwGetProcAddress);
-
+	
 	glEnable(GL_DEBUG_OUTPUT);
 	glDebugMessageCallback([](GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam) {
 		std::cout << message << std::endl;
 	}, nullptr);
-
+	#endif
+	
 	ChessBoard board{};
 	init(board);
 	// init_fen(board, "2n1RR2/p1p1PQp1/3N1r1k/rbBP3P/1Pp1K3/pp1Pb2P/P1p1Pq1p/1N1n4 w - - 0 1");
@@ -1056,6 +1143,10 @@ int main() {
 
 	Input current{};
 	Input prev{};
+
+	Rect rr = create_rect();
+	Shader s = create_shader();
+	Image pt = create_image();
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -1081,9 +1172,14 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		process_input(board, current, prev, sw, sh);
-		draw(board, sw, sh);
+		draw(rr, s, pt, board, sw, sh);
 
 		glfwSwapBuffers(window);
+
+		#ifdef __EMSCRIPTEN__
+		emscripten_sleep(5);
+		#endif
 	}
+
 	// OS will do the cleanup on app exit so don't even bother
 }
