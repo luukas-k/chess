@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chess</title>
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            background: rgb(244, 163, 132);
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas {
+            display: block;
+            border: 0;
+            background: #000;
+        }
+
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="status">Loading...</div>
+    <canvas id="canvas" tabindex="-1"></canvas>
+
+    <script>
+        var Module = {
+            canvas: document.getElementById("canvas"),
+
+            print: function (...args) {
+                console.log(...args);
+            },
+
+            printErr: function (...args) {
+                console.error(...args);
+            },
+
+            setStatus: function (text) {
+                document.getElementById("status").textContent = text;
+            }
+        };
+        console.log(Module);
+    </script>
+
+    {{{ SCRIPT }}}
+</body>
+</html>
