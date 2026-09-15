@@ -8,6 +8,7 @@
 #include <iostream>
 #include <string>
 #include <cstdint>
+#include <functional>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -1148,7 +1149,7 @@ int main() {
 	Shader s = create_shader();
 	Image pt = create_image();
 
-	while (!glfwWindowShouldClose(window)) {
+	std::function<void()> update = [&]() {
 		glfwPollEvents();
 
 		prev = current;
@@ -1175,11 +1176,19 @@ int main() {
 		draw(rr, s, pt, board, sw, sh);
 
 		glfwSwapBuffers(window);
+	};
 
-		#ifdef __EMSCRIPTEN__
-		emscripten_sleep(5);
-		#endif
+#ifdef __EMSCRIPTEN__
+	emscripten_set_main_loop_arg([](void *ptr) {
+		std::function<void()> *fn = (std::function<void()>*)ptr;
+		(*fn)();
+	}, &update, 0, true);
+#else
+	while (!glfwWindowShouldClose(window)) {
+		update();
 	}
+#endif
+
 
 	// OS will do the cleanup on app exit so don't even bother
 }
