@@ -1,4 +1,4 @@
-#include <glad/glad.h>
+#include <glad/gl.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
 
@@ -304,7 +304,7 @@ struct Image {
 
 Image create_image() {
 	int w{}, h{}, c{};
-	auto data = stbi_load("bin/pieces.png", &w, &h, &c, 4);
+	auto data = stbi_load("assets/pieces.png", &w, &h, &c, 4);
 
 	Image img{};
 	glGenTextures(1, &img.tex);
@@ -1040,7 +1040,7 @@ int main() {
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 	GLFWwindow* window = glfwCreateWindow(1280, 720, "Chess", nullptr, nullptr);
 	glfwMakeContextCurrent(window);
-	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+	gladLoadGL((GLADloadfunc)glfwGetProcAddress);
 
 	glEnable(GL_DEBUG_OUTPUT);
 	glDebugMessageCallback([](GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam) {
