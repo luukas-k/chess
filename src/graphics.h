@@ -53,6 +53,6 @@ void draw_rect(Rect &rr, Shader &s, Image &pt, int x, int y, int w, int h, int s
 void draw_piece(Rect &rr, Shader &s, Image &pt, int x, int y, int w, int h, int sw, int sh, uint8_t piece);
 bool key_was_released(const Input &current, const Input &prev, int key);
 bool button_was_released(const Input &current, const Input &prev, int btn);
-void draw_board(Rect &rr, Shader &s, Image &pt, const ChessBoard &brd, int offx, int offy, int w, int h, int sw, int sh);
-void process_input(ChessBoard &brd, const Input &cin, const Input &pin, int sw, int sh);
-void draw(Rect &rr, Shader &s, Image &pt, ChessBoard &brd, int sw, int sh);
+void draw_board(Rect &rr, Shader &s, Image &pt, const chess_board &brd, move_list& moves, int offx, int offy, int w, int h, int sw, int sh);
+void process_input(chess_board &brd, move_list& moves, const Input &cin, const Input &pin, int sw, int sh);
+void draw(Rect &rr, Shader &s, Image &pt, chess_board &brd, move_list& moves, int sw, int sh);

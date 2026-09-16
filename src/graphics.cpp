@@ -175,7 +175,7 @@ void draw_rect(Rect &rr, Shader &s, Image &pt, int x, int y, int w, int h, int s
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void draw_piece(Rect &rr, Shader &s, Image &pt, int x, int y, int w, int h, int sw, int sh, uint8_t piece) {
+void draw_piece(Rect &rr, Shader &s, Image &pt, int x, int y, int w, int h, int sw, int sh, colored_piece piece) {
 	glUseProgram(s.prog);
 
 	glUniform2f(s.loc_pos, (float)x / (float)sw, (float)y / (float)sh);
@@ -183,8 +183,8 @@ void draw_piece(Rect &rr, Shader &s, Image &pt, int x, int y, int w, int h, int 
 
 	glBindTexture(GL_TEXTURE_2D, pt.tex);
 	glUniform1i(s.loc_tex, 0);
-	float xoff = ((piece & ChessBoard::PIECE_BITS) - 1) * (1.f / 6.f);
-	float yoff = (((piece & ChessBoard::COLOR_BIT)) == ChessBoard::Color::White) * 1.f / 2.f;
+	float xoff = (((uint8_t)piece.type()) - 1) * (1.f / 6.f);
+	float yoff = (((piece.color())) == piece_color::white) * 1.f / 2.f;
 	glUniform2f(s.loc_tex_pos, xoff, yoff);
 	glUniform2f(s.loc_tex_scale, 1.f / 6.f, 1.f / 2.f);
 	glUniform1f(s.loc_color_fac, 0.f);
@@ -203,13 +203,13 @@ bool button_was_released(const Input &current, const Input &prev, int btn) {
 	return current.btns[btn] == false && prev.btns[btn] == true;
 }
 
-void draw_board(Rect &rr, Shader &s, Image &pt, const ChessBoard &brd, int offx, int offy, int w, int h, int sw, int sh) {
+void draw_board(Rect &rr, Shader &s, Image &pt, const chess_board &brd, move_list& moves, int offx, int offy, int w, int h, int sw, int sh) {
 	auto is_light_square = [](int x, int y) {
 		return (x % 2 == 0 && y % 2 == 0) || (x % 2 == 1 && y % 2 == 1);
 	};
 	auto is_checked_king = [&](int x, int y) {
 		if (brd.is_check || brd.is_checkmate) {
-			return brd.current_turn == ChessBoard::White ?
+			return brd.current_turn == piece_color::white ?
 				(brd.white_king_position == x + y * 8) :
 				(brd.black_king_position == x + y * 8);
 		}
@@ -219,8 +219,8 @@ void draw_board(Rect &rr, Shader &s, Image &pt, const ChessBoard &brd, int offx,
 		return x == (brd.selected % 8) && y == (brd.selected / 8);
 	};
 	auto is_move = [&](int x, int y) {
-		for (int i = 0; i < brd.move_count; i++) {
-			if (brd.move_list[i] == (x + y * 8)) {
+		for (int i = 0; i < moves.count; i++) {
+			if (moves.moves[i] == (x + y * 8)) {
 				return true;
 			}
 		}
@@ -257,8 +257,8 @@ void draw_board(Rect &rr, Shader &s, Image &pt, const ChessBoard &brd, int offx,
 		int py = (i / 8) * h + offy;
 		auto col = get_color((i % 8), (i / 8));
 		draw_rect(rr, s, pt, px, py, w, h, sw, sh, col);
-		if (get_type(brd, i) != 0)
-			draw_piece(rr, s, pt, px, py, w, h, sw, sh, get_piece(brd, i));
+		if (!brd.get_piece(i).empty())
+			draw_piece(rr, s, pt, px, py, w, h, sw, sh, brd.get_piece(i));
 	}
 
 	if (brd.wait_for_promotion_selection) {
@@ -269,8 +269,8 @@ void draw_board(Rect &rr, Shader &s, Image &pt, const ChessBoard &brd, int offx,
 			int selection_highlight = brd.selected;
 			draw_rect(rr, s, pt, (2 + selection_highlight) * w + offx, 3.5 * h + offy, w, h, sw, sh, { 0.4f, 0.2f, 0.2f });
 		}
-		int team = brd.current_turn == ChessBoard::White ? ChessBoard::Black : ChessBoard::White;;
-		int protion_pieces[]{ ChessBoard::Queen, ChessBoard::Rook, ChessBoard::Bishop, ChessBoard::Knight };
+		piece_color team = brd.current_turn == piece_color::white ? piece_color::black : piece_color::white;
+		piece_type protion_pieces[]{ piece_type::queen, piece_type::rook, piece_type::bishop, piece_type::knight };
 		for (int a = 0; a < 4; a++) {
 			int px = (2 + a) * w + offx;
 			int py = 3.5 * h + offy;
@@ -279,7 +279,7 @@ void draw_board(Rect &rr, Shader &s, Image &pt, const ChessBoard &brd, int offx,
 	}
 }
 
-void process_input(ChessBoard &brd, const Input &cin, const Input &pin, int sw, int sh) {
+void process_input(chess_board &brd, move_list& moves, const Input &cin, const Input &pin, int sw, int sh) {
 	int h = 0;
 	int w = 0;
 	int offx = 0;
@@ -307,9 +307,9 @@ void process_input(ChessBoard &brd, const Input &cin, const Input &pin, int sw, 
 		on_screen = true;
 	}
 
-	brd.move_count = 0;
+	moves.count = 0;
 	for (int i = 0; i < 64; i++)
-		brd.move_list[i] = -1;
+		moves.moves[i] = -1;
 
 	if (!brd.is_checkmate) {
 		if (!brd.wait_for_promotion_selection) {
@@ -317,8 +317,8 @@ void process_input(ChessBoard &brd, const Input &cin, const Input &pin, int sw, 
 				if (brd.selected == -1) {
 					brd.selected = hx + hy * 8;
 					// int selected_piece_color = (brd.pieces[brd.selected] & ChessBoard::COLOR_BIT);
-					ChessBoard::Color pieceColor = get_color(brd, brd.selected);
-					if (is_empty(brd, brd.selected) || (pieceColor != brd.current_turn)) {
+					piece_color pieceColor = brd.get_color(brd.selected);
+					if (brd.is_empty(brd.selected) || (pieceColor != brd.current_turn)) {
 						brd.selected = -1;
 					}
 				}
@@ -326,7 +326,7 @@ void process_input(ChessBoard &brd, const Input &cin, const Input &pin, int sw, 
 					if (brd.selected == (hx + hy * 8)) {
 						brd.selected = -1;
 					}
-					else if (is_own(brd, brd.selected, hx + hy * 8)) {
+					else if (brd.is_own(brd.selected, hx + hy * 8)) {
 						brd.selected = hx + hy * 8;
 					}
 				}
@@ -334,14 +334,14 @@ void process_input(ChessBoard &brd, const Input &cin, const Input &pin, int sw, 
 
 
 			if (brd.selected != -1) {
-				get_valid_moves(brd, brd.move_list, brd.move_count, brd.selected);
-				if (brd.move_count == 0) {
+				brd.get_valid_moves(moves.moves, moves.count, brd.selected);
+				if (moves.count == 0) {
 					brd.selected = -1;
 				}
 			}
 			else {
-				for (int i = 0; i < brd.move_count; i++) {
-					brd.move_list[i] = -1;
+				for (int i = 0; i < moves.count; i++) {
+					moves.moves[i] = -1;
 				}
 			}
 
@@ -349,16 +349,16 @@ void process_input(ChessBoard &brd, const Input &cin, const Input &pin, int sw, 
 			if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
 				// Move target
 				int move_target = hx + hy * 8;
-				if (in_range(move_target, 0, 64)) {
-					for (int i = 0; i < brd.move_count; i++) {
-						if ((brd.move_list[i] != -1) && (brd.move_list[i] == move_target)) {
-							do_move(brd, brd.selected, move_target);
+				if (brd.in_range(move_target, 0, 64)) {
+					for (int i = 0; i < moves.count ; i++) {
+						if ((moves.moves[i] != -1) && (moves.moves[i] == move_target)) {
+							brd.do_move(brd.selected, move_target);
 							brd.is_check = false;
-							if (is_in_checkmate(brd, brd.current_turn)) {
+							if (brd.is_in_checkmate(brd.current_turn)) {
 								brd.is_checkmate = true;
 								std::cout << "Checkmate!" << std::endl;
 							}
-							else if (is_in_check(brd, brd.current_turn)) {
+							else if (brd.is_in_check(brd.current_turn)) {
 								brd.is_check = true;
 								std::cout << "Check!" << std::endl;
 							}
@@ -381,18 +381,18 @@ void process_input(ChessBoard &brd, const Input &cin, const Input &pin, int sw, 
 			if (sel_offx >= 0 && sel_offx <= 4 && (sel_y == 0)) {
 				brd.selected = sel_offx;
 				if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
-					int promotion_pieces[]{ ChessBoard::Queen, ChessBoard::Rook, ChessBoard::Bishop, ChessBoard::Knight };
-					ChessBoard::Color teamToPromote = brd.current_turn == ChessBoard::White ? ChessBoard::Black : ChessBoard::White;
+					piece_type promotion_pieces[]{ piece_type::queen, piece_type::rook, piece_type::bishop, piece_type::knight };
+					piece_color teamToPromote = brd.current_turn == piece_color::white ? piece_color::black : piece_color::white;
 					brd.pieces[brd.to_be_promoted] = promotion_pieces[brd.selected] | teamToPromote;
 					brd.to_be_promoted = -1;
 					brd.wait_for_promotion_selection = false;
 					brd.selected = -1;
 					brd.is_check = false;
-					if (is_in_checkmate(brd, brd.current_turn)) {
+					if (brd.is_in_checkmate(brd.current_turn)) {
 						brd.is_checkmate = true;
 						std::cout << "Check mate!" << std::endl;
 					}
-					else if (is_in_check(brd, brd.current_turn)) {
+					else if (brd.is_in_check(brd.current_turn)) {
 						brd.is_check = true;
 						std::cout << "Check!" << std::endl;
 					}
@@ -408,11 +408,11 @@ void process_input(ChessBoard &brd, const Input &cin, const Input &pin, int sw, 
 	}
 
 	if (key_was_released(cin, pin, GLFW_KEY_R)) {
-		init(brd);
+		brd.init();
 	}
 }
 
-void draw(Rect &rr, Shader &s, Image &pt, ChessBoard &brd, int sw, int sh) {
+void draw(Rect &rr, Shader &s, Image &pt, chess_board &brd, move_list& moves, int sw, int sh) {
 	int h = 0;
 	int w = 0;
 	int offx = 0;
@@ -427,5 +427,5 @@ void draw(Rect &rr, Shader &s, Image &pt, ChessBoard &brd, int sw, int sh) {
 		h = w;
 		offy = (sh - h * 8) / 2;
 	}
-	draw_board(rr, s, pt, brd, offx, offy, w, h, sw, sh);
+	draw_board(rr, s, pt, brd, moves, offx, offy, w, h, sw, sh);
 }

@@ -15,8 +15,9 @@ int main() {
 	}, nullptr);
 	#endif
 	
-	ChessBoard board{};
-	init(board);
+	move_list moves{};
+	chess_board board{};
+	board.init();
 	// init_fen(board, "2n1RR2/p1p1PQp1/3N1r1k/rbBP3P/1Pp1K3/pp1Pb2P/P1p1Pq1p/1N1n4 w - - 0 1");
 
 	glEnable(GL_BLEND);
@@ -52,8 +53,8 @@ int main() {
 		glClearColor(244.f / 255.f, 163.f / 255.f, 132.f / 255.f, 1.f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		process_input(board, current, prev, sw, sh);
-		draw(rr, s, pt, board, sw, sh);
+		process_input(board, moves, current, prev, sw, sh);
+		draw(rr, s, pt, board, moves, sw, sh);
 
 		glfwSwapBuffers(window);
 	};
@@ -68,7 +69,6 @@ int main() {
 		update();
 	}
 #endif
-
 
 	// OS will do the cleanup on app exit so don't even bother
 }

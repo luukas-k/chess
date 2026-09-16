@@ -4,47 +4,56 @@
 #include <cassert>
 #include <string_view>
 
-struct ChessBoard {
-	enum PieceType {
-		None = 0,
-		King,
-		Queen,
-		Bishop,
-		Knight,
-		Rook,
-		Pawn,
-	};
-	enum Color {
-		Black = 0,
-		White = 1 << 4
-	};
-	constexpr static uint8_t PIECE_BITS = 0b111;
-	constexpr static uint8_t COLOR_BIT = 1 << 4;
-	// Board state
-	uint8_t pieces[8 * 8]{};
-	Color current_turn = Color::White;
-	// Currently selected piece on the board or in the pawn promotion menu
-	int8_t selected{ -1 };
-	// Pawn capture information
-	int en_passant_target{ -1 };
-	// Available moves
-	int move_list[65]{};
-	int move_count = 0;
-	// King information
-	bool is_check{ false }, is_checkmate{ false };
-	int white_king_position{ 0 }, black_king_position{ 0 };
-	// Square hovered by cursor
-	int hovered_square{ -1 };
-	// Pawn promotion info
-	int to_be_promoted{ -1 };
-	bool wait_for_promotion_selection{ false };
-	// Castling availability
-	bool
-		black_king_side{ true },
-		black_queen_side{ true },
-		white_king_side{ true },
-		white_queen_side{ true };
+enum struct piece_type : uint8_t {
+	none = 0,
+	king,
+	queen,
+	bishop,
+	knight,
+	rook,
+	pawn,
 };
+enum struct piece_color : uint8_t {
+	black = 0,
+	white = 1 << 4
+};
+
+constexpr static uint8_t PIECE_BITS = 0b111;
+constexpr static uint8_t COLOR_BIT = 1 << 4;
+
+struct colored_piece {
+	inline colored_piece()
+		:
+		value(0)
+	{}
+	inline colored_piece(piece_type type, piece_color col)
+		:
+		value(0)
+	{
+		value = (uint8_t)type | (uint8_t)col;
+	}
+
+	inline bool empty() const {
+		return value == 0;
+	}
+
+	inline piece_type type() const {
+		return (piece_type)(value & PIECE_BITS);
+	}
+	inline piece_color color() const {
+		return (piece_color)(value & COLOR_BIT);
+	}
+
+	bool operator==(const colored_piece &rhs) const {
+		return value == rhs.value;
+	}
+
+	uint8_t value{};
+};
+
+inline colored_piece operator|(const piece_type &lhs, const piece_color &rhs) {
+	return colored_piece(lhs, rhs);
+}
 
 // Directions set to offsets in an array that correspond to movements on the grid
 enum {
@@ -61,7 +70,7 @@ struct Position {
 	inline Position(int p, IgnoreInvalid i) : p(p) {}
 	inline Position(int x, int y) : Position(x + y * 8) {}
 	inline Position offset(int mv) { return Position(p + mv); }
-	
+
 	int p{};
 
 	inline int x() const { return p % 8; }
@@ -69,52 +78,67 @@ struct Position {
 	inline bool is_valid() { return (x() >= 0) && (x() < 8) && (y() >= 0) && (y() < 8); }
 };
 
-ChessBoard::Color get_color(const ChessBoard &brd, Position p);
-ChessBoard::PieceType get_type(const ChessBoard &brd, Position p);
-int get_piece(const ChessBoard &brd, Position p);
+struct move_list {
+	move_list() 
+		:
+		count(0)
+	{}
 
-void init_fen(ChessBoard &brd, std::string_view fen);
-void init(ChessBoard &brd);
+	// Available moves
+	int moves[65]{};
+	int count = 0;
+};
 
-bool in_range(int val, int min_inc, int max_ex);
+struct chess_board {
+	piece_color get_color(Position p);
+	piece_type get_type(Position p) const;
+	colored_piece get_piece(Position p) const;
 
-bool is_empty(const ChessBoard &brd, Position p);;
+	void init_fen(std::string_view fen);
+	void init();
 
-bool is_enemy(const ChessBoard &brd, Position self, Position p);;
+	bool in_range(int val, int min_inc, int max_ex);
+	bool is_empty(Position p);;
+	bool is_enemy(Position self, Position p);;
+	bool is_enemy_or_empty(int self, int p);;
+	bool is_own(int self, int p);;
+	bool is_in_check(piece_color c);
+	void do_move(Position from_pos, Position to_pos);
+	bool resolves_check(Position pos, Position target);;
+	bool causes_check_on_self(Position pos, Position target);;
+	void add_move(int *move_list, int &move_count, Position pos, int move);;
+	bool is_valid(Position p, int move);;
+	void get_pawn_moves(int *move_list, int &move_count, Position p);
+	void get_knight_moves(int *move_list, int &move_count, Position p);;
+	void get_bishop_moves(int *move_list, int &move_count, Position p);;
+	void get_queen_moves(int *move_list, int &move_count, Position p);
+	void get_rook_moves(int *move_list, int &move_count, Position p);
+	void get_king_moves(int *move_list, int &move_count, Position p);;
+	void get_moves(int *move_list, int &move_count, Position p);;
+	void get_valid_moves(int *move_list, int &move_count, Position p);
+	bool is_in_checkmate(piece_color c);
 
-bool is_enemy_or_empty(const ChessBoard &brd, int self, int p);;
-
-bool is_own(const ChessBoard &brd, int self, int p);;
-
-bool is_in_check(const ChessBoard &brd, ChessBoard::Color c);
-void do_move(ChessBoard &brd, Position from_pos, Position to_pos);
-
-bool resolves_check(const ChessBoard &brd, Position pos, Position target);;
-
-bool causes_check_on_self(const ChessBoard &brd, Position pos, Position target);;
-
-void add_move(const ChessBoard &brd, int *move_list, int &move_count, Position pos, int move);;
-
-bool is_valid(Position p, int move);;
-
-void get_pawn_moves(const ChessBoard &brd, int *move_list, int &move_count, Position p);
-
-void get_knight_moves(const ChessBoard &brd, int *move_list, int &move_count, Position p);;
-
-void get_bishop_moves(const ChessBoard &brd, int *move_list, int &move_count, Position p);;
-void get_queen_moves(const ChessBoard &brd, int *move_list, int &move_count, Position p);
-
-void get_rook_moves(const ChessBoard &brd, int *move_list, int &move_count, Position p);
-
-void get_king_moves(const ChessBoard &brd, int *move_list, int &move_count, Position p);;
-
-void get_moves(const ChessBoard &brd, int *move_list, int &move_count, Position p);;
-
-void get_valid_moves(const ChessBoard &brd, int *move_list, int &move_count, Position p);
+	// Board state
+	colored_piece pieces[8 * 8]{};
+	piece_color current_turn = piece_color::white;
+	// Currently selected piece on the board or in the pawn promotion menu
+	int8_t selected{ -1 };
+	// Pawn capture information
+	int en_passant_target{ -1 };
+	// King information
+	bool is_check{ false }, is_checkmate{ false };
+	int white_king_position{ 0 }, black_king_position{ 0 };
+	// Square hovered by cursor
+	int hovered_square{ -1 };
+	// Pawn promotion info
+	int to_be_promoted{ -1 };
+	bool wait_for_promotion_selection{ false };
+	// Castling availability
+	bool
+		black_king_side{ true },
+		black_queen_side{ true },
+		white_king_side{ true },
+		white_queen_side{ true };
+};
 
 
-bool is_in_checkmate(const ChessBoard &brd, ChessBoard::Color c);
-
-void do_move(ChessBoard &brd, Position from_pos, Position to_pos);
-
-bool resolves_check(const ChessBoard &brd, Position pos, Position target);
