@@ -31,6 +31,10 @@ window::window()
 	});
 	glfwSetMouseButtonCallback(_handle, [](GLFWwindow *wnd, int button, int action, int mods) {
 		window *w = reinterpret_cast<window *>(glfwGetWindowUserPointer(wnd));
+		double xp{}, yp{};
+		glfwGetCursorPos(wnd, &xp, &yp);
+		w->_input.x = xp;
+		w->_input.y = yp;
 		w->_input.btn_state[button] = (action == GLFW_PRESS || action == GLFW_REPEAT);
 		if (action == GLFW_PRESS)
 			w->_input.btn_press[button] = true;
