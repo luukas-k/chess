@@ -195,12 +195,14 @@ void draw_piece(Rect &rr, Shader &s, Image &pt, int x, int y, int w, int h, int 
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-bool key_was_released(const Input &current, const Input &prev, int key) {
-	return current.keys[key] == false && prev.keys[key] == true;
+bool key_was_released(const Input &current, int key) {
+	bool b = current.key_release[key];
+	return b;
 }
 
-bool button_was_released(const Input &current, const Input &prev, int btn) {
-	return current.btns[btn] == false && prev.btns[btn] == true;
+bool button_was_released(const Input &current, int btn) {
+	bool b = current.btn_release[btn];
+	return b;
 }
 
 void draw_board(Rect &rr, Shader &s, Image &pt, const chess_board &brd, move_list& moves, int offx, int offy, int w, int h, int sw, int sh) {
@@ -279,7 +281,7 @@ void draw_board(Rect &rr, Shader &s, Image &pt, const chess_board &brd, move_lis
 	}
 }
 
-void process_input(chess_board &brd, move_list& moves, const Input &cin, const Input &pin, int sw, int sh) {
+void process_input(chess_board &brd, move_list& moves, const Input &cin, int sw, int sh) {
 	int h = 0;
 	int w = 0;
 	int offx = 0;
@@ -313,7 +315,7 @@ void process_input(chess_board &brd, move_list& moves, const Input &cin, const I
 
 	if (!brd.is_checkmate) {
 		if (!brd.wait_for_promotion_selection) {
-			if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
+			if (button_was_released(cin, GLFW_MOUSE_BUTTON_1)) {
 				if (brd.selected == -1) {
 					brd.selected = hx + hy * 8;
 					// int selected_piece_color = (brd.pieces[brd.selected] & ChessBoard::COLOR_BIT);
@@ -334,7 +336,7 @@ void process_input(chess_board &brd, move_list& moves, const Input &cin, const I
 
 
 			if (brd.selected != -1) {
-				brd.get_valid_moves(moves.moves, moves.count, brd.selected);
+				brd.get_valid_moves(moves, brd.selected);
 				if (moves.count == 0) {
 					brd.selected = -1;
 				}
@@ -346,7 +348,7 @@ void process_input(chess_board &brd, move_list& moves, const Input &cin, const I
 			}
 
 			// Do the move
-			if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
+			if (button_was_released(cin, GLFW_MOUSE_BUTTON_1)) {
 				// Move target
 				int move_target = hx + hy * 8;
 				if (brd.in_range(move_target, 0, 64)) {
@@ -380,7 +382,7 @@ void process_input(chess_board &brd, move_list& moves, const Input &cin, const I
 			int sel_y = (cin.y + h / 2 - offy) / h - 4;
 			if (sel_offx >= 0 && sel_offx <= 4 && (sel_y == 0)) {
 				brd.selected = sel_offx;
-				if (button_was_released(cin, pin, GLFW_MOUSE_BUTTON_1)) {
+				if (button_was_released(cin, GLFW_MOUSE_BUTTON_1)) {
 					piece_type promotion_pieces[]{ piece_type::queen, piece_type::rook, piece_type::bishop, piece_type::knight };
 					piece_color teamToPromote = brd.current_turn == piece_color::white ? piece_color::black : piece_color::white;
 					brd.pieces[brd.to_be_promoted] = promotion_pieces[brd.selected] | teamToPromote;
@@ -407,12 +409,12 @@ void process_input(chess_board &brd, move_list& moves, const Input &cin, const I
 		brd.selected = -1;
 	}
 
-	if (key_was_released(cin, pin, GLFW_KEY_R)) {
+	if (key_was_released(cin, GLFW_KEY_R)) {
 		brd.init();
 	}
 }
 
-void draw(Rect &rr, Shader &s, Image &pt, chess_board &brd, move_list& moves, int sw, int sh) {
+void draw_game(Rect &rr, Shader &s, Image &pt, chess_board &brd, move_list& moves, int sw, int sh) {
 	int h = 0;
 	int w = 0;
 	int offx = 0;

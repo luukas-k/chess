@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cassert>
 #include <string_view>
+#include <optional>
 
 enum struct piece_type : uint8_t {
 	none = 0,
@@ -66,6 +67,7 @@ enum {
 enum struct IgnoreInvalid { _ };
 
 struct Position {
+	inline Position() : p(-1) {}
 	inline Position(int p) : p(p) { assert(p >= 0); assert(p < 64); }
 	inline Position(int p, IgnoreInvalid i) : p(p) {}
 	inline Position(int x, int y) : Position(x + y * 8) {}
@@ -79,7 +81,7 @@ struct Position {
 };
 
 struct move_list {
-	move_list() 
+	inline move_list() 
 		:
 		count(0)
 	{}
@@ -87,6 +89,11 @@ struct move_list {
 	// Available moves
 	int moves[65]{};
 	int count = 0;
+};
+
+struct move {
+	Position from{}, to{};
+	colored_piece capture{};
 };
 
 struct chess_board {
@@ -97,26 +104,31 @@ struct chess_board {
 	void init_fen(std::string_view fen);
 	void init();
 
-	bool in_range(int val, int min_inc, int max_ex);
-	bool is_empty(Position p);;
-	bool is_enemy(Position self, Position p);;
-	bool is_enemy_or_empty(int self, int p);;
-	bool is_own(int self, int p);;
+	bool is_in_checkmate(piece_color c);
 	bool is_in_check(piece_color c);
 	void do_move(Position from_pos, Position to_pos);
+	bool in_range(int val, int min_inc, int max_ex);
+	void get_valid_moves(move_list &mvs, Position p);
+	bool is_own(int self, Position p);
+	bool is_empty(Position p);
+
+private:
+	bool is_enemy(Position self, Position p);;
+	bool is_enemy_or_empty(int self, int p);;
 	bool resolves_check(Position pos, Position target);;
 	bool causes_check_on_self(Position pos, Position target);;
-	void add_move(int *move_list, int &move_count, Position pos, int move);;
+	void add_move(move_list &mvs, Position pos, int move);;
 	bool is_valid(Position p, int move);;
-	void get_pawn_moves(int *move_list, int &move_count, Position p);
-	void get_knight_moves(int *move_list, int &move_count, Position p);;
-	void get_bishop_moves(int *move_list, int &move_count, Position p);;
-	void get_queen_moves(int *move_list, int &move_count, Position p);
-	void get_rook_moves(int *move_list, int &move_count, Position p);
-	void get_king_moves(int *move_list, int &move_count, Position p);;
-	void get_moves(int *move_list, int &move_count, Position p);;
-	void get_valid_moves(int *move_list, int &move_count, Position p);
-	bool is_in_checkmate(piece_color c);
+
+	void get_moves(move_list &mvs, Position p);;
+	void get_pawn_moves(move_list &mvs, Position p);
+	void get_knight_moves(move_list &mvs, Position p);;
+	void get_bishop_moves(move_list &mvs, Position p);;
+	void get_queen_moves(move_list &mvs, Position p);
+	void get_rook_moves(move_list &mvs, Position p);
+	void get_king_moves(move_list &mvs, Position p);;
+
+public:
 
 	// Board state
 	colored_piece pieces[8 * 8]{};

@@ -1,14 +1,10 @@
 #include "board.h"
 
 piece_color chess_board::get_color(Position p) {
-	/*piece_color color = (piece_color)(pieces[p.p] & COLOR_BIT);
-	return color;*/
 	return pieces[p.p].color();
 }
 
 piece_type chess_board::get_type(Position p) const {
-	/*piece_type type = (piece_type)(pieces[p.p] & PIECE_BITS);
-	return type;*/
 	return pieces[p.p].type();
 }
 
@@ -174,7 +170,7 @@ bool chess_board::is_enemy_or_empty(int self, int p) {
 	return is_enemy(self, p) || is_empty(p);
 }
 
-bool chess_board::is_own(int self, int p) {
+bool chess_board::is_own(int self, Position p) {
 	return
 		get_color(self) == get_color(p) &&
 		get_type(self) != piece_type::none &&
@@ -187,11 +183,10 @@ bool chess_board::is_in_check(piece_color c) {
 	for (int i = 0; i < 64; i++) {
 		Position from(i);
 		if (!is_empty(i) && ((get_color(from) == opposingColor))) {
-			int piece_move_list[64]{};
-			int piece_move_count = 0;
-			get_moves(piece_move_list, piece_move_count, from);
-			for (int mv_i = 0; mv_i < piece_move_count; mv_i++) {
-				Position target(piece_move_list[mv_i]);
+			move_list piece_move_list{};
+			get_moves(piece_move_list, from);
+			for (int mv_i = 0; mv_i < piece_move_list.count; mv_i++) {
+				Position target(piece_move_list.moves[mv_i]);
 				if (target.p == king_location.p) {
 					return true;
 				}
@@ -201,14 +196,14 @@ bool chess_board::is_in_check(piece_color c) {
 	return false;
 }
 
-void chess_board::add_move(int *move_list, int &move_count, Position pos, int move) {
+void chess_board::add_move(move_list &mvs, Position pos, int move) {
 	Position targ = pos.offset(move);
 	if (!is_empty(targ) && (get_color(pos) == get_color(targ))) {
 		return;
 	}
-	assert(move_count < 64);
-	move_list[move_count] = targ.p;
-	move_count += 1;
+	assert(mvs.count < 64);
+	mvs.moves[mvs.count] = targ.p;
+	mvs.count += 1;
 }
 
 bool chess_board::is_valid(Position p, int move) {
@@ -216,7 +211,7 @@ bool chess_board::is_valid(Position p, int move) {
 	return np.is_valid();
 }
 
-void chess_board::get_pawn_moves(int *move_list, int &move_count, Position p) {
+void chess_board::get_pawn_moves(move_list &mvs, Position p) {
 	int dir =
 		((pieces[(int)p.p].color()) == piece_color::black) ?
 		Up : Down;
@@ -227,9 +222,9 @@ void chess_board::get_pawn_moves(int *move_list, int &move_count, Position p) {
 		return;
 	}
 	if (is_empty(p.offset(dir))) {
-		add_move(move_list, move_count, p, dir);
+		add_move(mvs, p, dir);
 		if (can_double_move && is_empty(p.offset(dir * 2))) {
-			add_move(move_list, move_count, p, dir * 2);
+			add_move(mvs, p, dir * 2);
 		}
 	}
 	auto can_enpassant = [&](Position from, bool towards_left) {
@@ -255,23 +250,23 @@ void chess_board::get_pawn_moves(int *move_list, int &move_count, Position p) {
 	};
 	if (p.x() != 0) {
 		if (!is_empty(p.offset(dir + Left)) && is_enemy(p, p.offset(dir + Left))) {
-			add_move(move_list, move_count, p, dir + Left);
+			add_move(mvs, p, dir + Left);
 		}
 		if (can_enpassant(p, true)) {
-			add_move(move_list, move_count, p, dir + Left);
+			add_move(mvs, p, dir + Left);
 		}
 	}
 	if (p.x() != 7) {
 		if (!is_empty(p.offset(dir + Right)) && is_enemy(p, p.offset(dir + Right))) {
-			add_move(move_list, move_count, p, dir + Right);
+			add_move(mvs, p, dir + Right);
 		}
 		if (can_enpassant(p, false)) {
-			add_move(move_list, move_count, p, dir + Right);
+			add_move(mvs, p, dir + Right);
 		}
 	}
 }
 
-void chess_board::get_knight_moves(int *move_list, int &move_count, Position p) {
+void chess_board::get_knight_moves(move_list &mvs, Position p) {
 	// return;
 
 	int possible_moves[]{ Left * 2 + Up, Left + 2 * Up, Right + 2 * Up, Right * 2 + Up, Right * 2 + Down, Right + Down * 2, Left + Down * 2, Left * 2 + Down };
@@ -291,12 +286,12 @@ void chess_board::get_knight_moves(int *move_list, int &move_count, Position p) 
 
 		if (is_valid(p, possible_moves[i])) {
 			if (is_empty(p.offset(possible_moves[i]).p) || (!is_empty(p.offset(possible_moves[i]).p) && is_enemy(p, p.offset(possible_moves[i]))))
-				add_move(move_list, move_count, p, possible_moves[i]);
+				add_move(mvs, p, possible_moves[i]);
 		}
 	}
 }
 
-void chess_board::get_bishop_moves(int *move_list, int &move_count, Position p) {
+void chess_board::get_bishop_moves(move_list &mvs, Position p) {
 	int possible_dirs[]{ Left + Up, Right + Up, Right + Down, Left + Down };
 	int possible_dir_count = 4;
 	int max_moves_left = p.x();
@@ -316,19 +311,19 @@ void chess_board::get_bishop_moves(int *move_list, int &move_count, Position p) 
 			for (int dist = 0; dist < max_moves_direction; dist++) {
 				tp = tp.offset(possible_dirs[i]);
 				if (!is_empty(tp.p) && is_enemy(p, tp)) {
-					add_move(move_list, move_count, p, tp.p - p.p);
+					add_move(mvs, p, tp.p - p.p);
 					break;
 				}
 				if (is_own(p.p, tp.p)) {
 					break;
 				}
-				add_move(move_list, move_count, p, tp.p - p.p);
+				add_move(mvs, p, tp.p - p.p);
 			}
 		}
 	}
 }
 
-void chess_board::get_queen_moves(int *move_list, int &move_count, Position p) {
+void chess_board::get_queen_moves(move_list &mvs, Position p) {
 	int possible_dirs[]{ Left + Up, Right + Up, Right + Down, Left + Down, Left, Up, Right, Down };
 	int possible_dir_count = 8;
 	int max_moves_left = p.x();
@@ -352,19 +347,19 @@ void chess_board::get_queen_moves(int *move_list, int &move_count, Position p) {
 			for (int dist = 0; dist < max_moves_direction; dist++) {
 				// tp = tp.offset(possible_dirs[i]);
 				if (!is_empty(p.p + possible_dirs[i] * (dist + 1)) && is_enemy(p, p.p + possible_dirs[i] * (dist + 1))) {
-					add_move(move_list, move_count, p, possible_dirs[i] * (dist + 1));
+					add_move(mvs, p, possible_dirs[i] * (dist + 1));
 					break;
 				}
 				if (is_own(p.p, p.p + possible_dirs[i] * (dist + 1))) {
 					break;
 				}
-				add_move(move_list, move_count, p, possible_dirs[i] * (dist + 1));
+				add_move(mvs, p, possible_dirs[i] * (dist + 1));
 			}
 		}
 	}
 }
 
-void chess_board::get_rook_moves(int *move_list, int &move_count, Position p) {
+void chess_board::get_rook_moves(move_list &mvs, Position p) {
 	int possible_dirs[]{ Left, Up, Right, Down };
 	int possible_dir_count = 4;
 	int max_moves_left = p.x();
@@ -384,19 +379,19 @@ void chess_board::get_rook_moves(int *move_list, int &move_count, Position p) {
 			for (int dist = 0; dist < max_moves_direction; dist++) {
 				// tp = tp.offset(possible_dirs[i]);
 				if (!is_empty(p.p + possible_dirs[i] * (dist + 1)) && is_enemy(p, p.p + possible_dirs[i] * (dist + 1))) {
-					add_move(move_list, move_count, p, possible_dirs[i] * (dist + 1));
+					add_move(mvs, p, possible_dirs[i] * (dist + 1));
 					break;
 				}
 				if (is_own(p.p, p.p + possible_dirs[i] * (dist + 1))) {
 					break;
 				}
-				add_move(move_list, move_count, p, possible_dirs[i] * (dist + 1));
+				add_move(mvs, p, possible_dirs[i] * (dist + 1));
 			}
 		}
 	}
 }
 
-void chess_board::get_king_moves(int *move_list, int &move_count, Position p) {
+void chess_board::get_king_moves(move_list &mvs, Position p) {
 	int possible_dirs[]{ Left + Up, Right + Up, Right + Down, Left + Down, Up, Down, Left, Right };
 	int possible_dir_count = 8;
 	for (int i = 0; i < possible_dir_count; i++) {
@@ -406,7 +401,7 @@ void chess_board::get_king_moves(int *move_list, int &move_count, Position p) {
 				int dx = target.x() > p.x() ? target.x() - p.x() : p.x() - target.x();
 				int dy = target.y() > p.y() ? target.y() - p.y() : p.y() - target.y();
 				if ((dx == 1 && dy == 0) || (dy == 1 && dx == 0) || (dy == 1 && dx == 1)) {
-					add_move(move_list, move_count, p, possible_dirs[i]);
+					add_move(mvs, p, possible_dirs[i]);
 				}
 			}
 		}
@@ -431,51 +426,51 @@ void chess_board::get_king_moves(int *move_list, int &move_count, Position p) {
 		is_empty(Position(3, king_row));
 
 	if (can_queen_side_castle) {
-		add_move(move_list, move_count, p, Left * 2);
+		add_move(mvs, p, Left * 2);
 	}
 	if (can_king_side_castle) {
-		add_move(move_list, move_count, p, Right * 2);
+		add_move(mvs, p, Right * 2);
 	}
 }
 
-void chess_board::get_moves(int *move_list, int &move_count, Position p) {
+void chess_board::get_moves(move_list &mvs, Position p) {
 	auto type = get_type(p);
 	if (type == piece_type::pawn)
-		get_pawn_moves(move_list, move_count, p);
+		get_pawn_moves(mvs, p);
 	else if (type == piece_type::knight)
-		get_knight_moves(move_list, move_count, p);
+		get_knight_moves(mvs, p);
 	else if (type == piece_type::bishop)
-		get_bishop_moves(move_list, move_count, p);
+		get_bishop_moves(mvs, p);
 	else if (type == piece_type::queen)
-		get_queen_moves(move_list, move_count, p);
+		get_queen_moves(mvs, p);
 	else if (type == piece_type::king)
-		get_king_moves(move_list, move_count, p);
+		get_king_moves(mvs, p);
 	else if (type == piece_type::rook)
-		get_rook_moves(move_list, move_count, p);
+		get_rook_moves(mvs, p);
 	else {
-		move_count = 0;
+		mvs.count = 0;
 	}
 }
 
-void chess_board::get_valid_moves(int *move_list, int &move_count, Position p) {
-	move_count = 0;
-	get_moves(move_list, move_count, p);
+void chess_board::get_valid_moves(move_list &mvs, Position p) {
+	mvs.count = 0;
+	get_moves(mvs, p);
 	int valid_move_count = 0;
-	for (int mv_i = 0; mv_i < move_count; mv_i++) {
+	for (int mv_i = 0; mv_i < mvs.count; mv_i++) {
 		if (is_check) {
-			if (resolves_check(p, move_list[mv_i])) {
-				move_list[valid_move_count] = move_list[mv_i];
+			if (resolves_check(p, mvs.moves[mv_i])) {
+				mvs.moves[valid_move_count] = mvs.moves[mv_i];
 				valid_move_count++;
 			}
 		}
 		else {
-			if (!causes_check_on_self(p, move_list[mv_i])) {
-				move_list[valid_move_count] = move_list[mv_i];
+			if (!causes_check_on_self(p, mvs.moves[mv_i])) {
+				mvs.moves[valid_move_count] = mvs.moves[mv_i];
 				valid_move_count++;
 			}
 		}
 	}
-	move_count = valid_move_count;
+	mvs.count = valid_move_count;
 }
 
 bool chess_board::is_in_checkmate(piece_color c) {
@@ -484,10 +479,9 @@ bool chess_board::is_in_checkmate(piece_color c) {
 	for (int i = 0; i < 64; i++) {
 		Position from(i);
 		if (!copy.is_empty(i) && ((copy.get_color(from) == c))) {
-			int piece_move_list[64]{};
-			int piece_move_count = 0;
-			copy.get_valid_moves(piece_move_list, piece_move_count, from);
-			if (piece_move_count != 0) {
+			move_list piece_move_list{};
+			copy.get_valid_moves(piece_move_list, from);
+			if (piece_move_list.count != 0) {
 				return false;
 			}
 		}
